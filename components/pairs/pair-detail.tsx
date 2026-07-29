@@ -18,6 +18,7 @@ import {
   Layers,
   Link2,
   Repeat,
+  Rocket,
   SlidersHorizontal,
   Sparkles,
   SplitSquareHorizontal,
@@ -27,18 +28,13 @@ import {
   Zap,
 } from "lucide-react"
 
+import { DetailHeader } from "@/components/registry/detail-header"
+import { InfoRow, StatTile } from "@/components/registry/stat-tile"
 import { TaskBadge } from "@/components/registry/task-badge"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { getTaskThumbnail, type AssetPair } from "@/lib/registry-data"
 import { cn } from "@/lib/utils"
 
@@ -57,18 +53,12 @@ function trainingInfo(pair: AssetPair) {
   const epochs = 80 + (seed % 40)
   const bestEpoch = Math.max(1, epochs - 6 - (seed % 8))
   return [
-    { icon: CalendarRange, label: "학습 기간", value: `${dataset.createdAt} ~ ${model.version} 릴리스` },
-    {
-      icon: SplitSquareHorizontal,
-      label: "데이터 분할",
-      value: `Train ${dataset.splitRatio[0]} / Val ${dataset.splitRatio[1]} / Test ${dataset.splitRatio[2]}`,
-    },
+
     { icon: Repeat, label: "Epoch", value: `${epochs} epochs` },
     { icon: Layers, label: "Batch Size", value: `${16 + (seed % 4) * 8}` },
     { icon: SlidersHorizontal, label: "Learning Rate", value: "1e-3 (cosine decay)" },
     { icon: Gauge, label: "Optimizer", value: "AdamW (weight decay 0.05)" },
-    { icon: Target, label: "Best Epoch", value: `Epoch ${bestEpoch}` },
-    { icon: Workflow, label: "학습 파이프라인", value: `${dataset.name} → ${model.framework} 학습 → AAS 등록` },
+    { icon: Target, label: "Best Epoch", value: `Epoch ${bestEpoch}` }
   ]
 }
 
@@ -139,49 +129,6 @@ function ioSummary(pair: AssetPair) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Overview asset node                                                 */
-/* ------------------------------------------------------------------ */
-
-function AssetNode({ kind, pair }: { kind: "dataset" | "model"; pair: AssetPair }) {
-  const isDataset = kind === "dataset"
-  const Icon = isDataset ? Database : Cpu
-  const image = getTaskThumbnail(isDataset ? pair.dataset.task : pair.model.task)
-  const name = isDataset ? pair.dataset.name : pair.model.name
-  const meta = isDataset
-    ? [pair.dataset.labelType, `${pair.dataset.totalSamples} 장`, `${pair.dataset.classCount}종 라벨`, pair.dataset.storage.fileType]
-    : [pair.model.framework, pair.model.version, pair.model.task]
-
-  return (
-    <div className="flex flex-1 items-center gap-4 rounded-2xl border border-border bg-card p-5">
-      <span className="relative size-16 shrink-0 overflow-hidden rounded-xl border border-border bg-muted">
-        <Image src={image || "/placeholder.svg"} alt={`${name} 미리보기`} fill className="object-cover" sizes="64px" />
-      </span>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span
-          className={cn(
-            "inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium",
-            isDataset ? "bg-chart-3/10 text-chart-3" : "bg-primary/10 text-primary",
-          )}
-        >
-          <Icon className="size-3.5" />
-          {isDataset ? "AI Dataset" : "AI Model"}
-        </span>
-        <span className="truncate whitespace-nowrap text-lg font-semibold leading-tight" title={name}>
-          {name}
-        </span>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          {meta.map((m, i) => (
-            <span key={m} className="flex items-center gap-2">
-              {i > 0 && <span className="text-border">|</span>}
-              {m}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /* ------------------------------------------------------------------ */
 
@@ -197,117 +144,121 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
     : [pair.dataset.image]
   const totalNum = Number.parseInt(pair.dataset.totalSamples.replace(/[^0-9]/g, ""), 10) || samples.length
 
+  const [trainPct, valPct, testPct] = pair.dataset.splitRatio
+  const splitLabel = `${trainPct} : ${valPct} : ${testPct}`
+
   const headerStats = [
-    { icon: Target, label: pair.metric.label, value: pair.metric.value },
-    { icon: Download, label: "다운로드", value: formatCompact(pair.downloads) },
-    { icon: Heart, label: "즐겨찾기", value: formatCompact(pair.stars) },
+    { label: pair.metric.label, value: pair.metric.value },
+    { label: "다운로드", value: formatCompact(pair.downloads) },
+    { label: "즐겨찾기", value: formatCompact(pair.stars) },
   ]
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:px-8 md:py-10">
-      {/* Breadcrumb */}
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink render={<Link href="/pairs" />}>AI Asset Pairs</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>페어 상세</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-
-      {/* Page header: title (left) + quick stats (right) */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+      <DetailHeader
+        layout="pair"
+        title={pair.title}
+        image={getTaskThumbnail(pair.task)}
+        imageAlt={`${pair.title} 미리보기`}
+        version={pair.version}
+        breadcrumb={{ label: "AI Asset Pair", href: "/pairs" }}
+        tags={pair.tags}
+        badges={
+          <>
             <TaskBadge task={pair.task} />
-            {isValidated && (
-              <Badge variant="secondary" className="gap-1 text-primary">
-                <CheckCircle2 className="size-3.5" />
-                AAS 검증 완료
-              </Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1
-              className="min-w-0 text-2xl font-semibold tracking-tight md:truncate md:whitespace-nowrap md:text-3xl"
-              title={pair.title}
-            >
-              {pair.title}
-            </h1>
-            <Badge variant="secondary" className="gap-1.5">
-              <Link2 className="size-3.5 text-primary" />
-              Pair {pair.version}
+            <Badge variant={isValidated ? "default" : "secondary"} className="gap-1">
+              <CheckCircle2 className="size-3.5" />
+              {isValidated ? "AAS 검증 완료" : "검증 대기"}
             </Badge>
+          </>
+        }
+        pairInfo={{
+          dataset: {
+            name: pair.dataset.name,
+            totalSamples: pair.dataset.totalSamples,
+            classCount: pair.dataset.classCount,
+            fileType: pair.dataset.storage.fileType,
+          },
+          model: {
+            name: pair.model.name,
+            framework: pair.model.framework,
+            version: pair.model.version,
+            task: pair.model.task,
+          },
+        }}
+        primaryAction={{
+          label: "Deploy",
+          icon: Rocket,
+          href: `/models/${pair.model.id}/deploy`,
+          newTab: true,
+        }}
+      />
+
+      {/*적용환경 및 배경*/}
+      <Card className="overflow-hidden">
+        {/* Section heading */}
+        <CardHeader className="border-b border-border bg-muted/20 px-6 py-5">
+          <div className="flex flex-col gap-1.5">
+            <CardTitle className="text-xl font-semibold tracking-tight">
+              적용 환경 및 배경
+            </CardTitle>
+
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Sparkles className="size-3.5 text-primary" />
+              AI 모델과 데이터셋의 메타데이터를 기반으로 LLM이 생성한 설명입니다.
+            </p>
           </div>
-        </div>
+        </CardHeader>
 
-        <div className="flex items-stretch gap-2 sm:gap-4">
-          {headerStats.map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex min-w-[92px] flex-col items-center gap-1 rounded-2xl px-4 py-2">
-              <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-                <Icon className="size-3.5" />
-                {label}
-              </span>
-              <span className="text-2xl font-semibold tabular-nums text-primary">{value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+        <CardContent className="p-6">
+          {/* Context information */}
+          <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-4">
+            <ContextBlock
+              icon={Building2}
+              title="적용 환경"
+              body={ctx.environment}
+            />
 
-      {/* 1. Pair Overview — Dataset → Used for Training → Model */}
-      <Card className="ring-1 ring-primary/10">
-        <CardContent className="flex flex-col items-stretch gap-4 p-6 lg:flex-row lg:items-center">
-          <AssetNode kind="dataset" pair={pair} />
+            <ContextBlock
+              icon={HelpCircle}
+              title="등장 배경"
+              body={ctx.background}
+            />
 
-          {/* Center relationship connector */}
-          <div className="flex shrink-0 flex-col items-center justify-center gap-2 px-2 lg:w-48">
-            <div className="flex w-full items-center gap-2">
-              <span className="hidden h-px flex-1 border-t border-dashed border-primary/40 lg:block" />
-              <span className="flex size-11 items-center justify-center rounded-full border border-primary/30 bg-primary/5 text-primary">
-                <Link2 className="size-5" />
-              </span>
-              <span className="hidden h-px flex-1 border-t border-dashed border-primary/40 lg:block">
-                <ArrowRight className="ml-auto -mt-2 size-4 text-primary/60" />
-              </span>
-            </div>
-            <span className="text-sm font-semibold text-primary">Used for Training</span>
+            <ContextBlock
+              icon={Target}
+              title="이 페어의 목적"
+              body={ctx.purpose}
+            />
+
+            <ContextBlock
+              icon={Zap}
+              title="핵심 강점"
+              body={ctx.strength}
+            />
           </div>
 
-          <AssetNode kind="model" pair={pair} />
-        </CardContent>
-      </Card>
+          {/* Application scope */}
+          <div className="mt-8 border-t border-border pt-6">
+            <div className="flex flex-col gap-3">
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Sparkles className="size-3.5" />
+                </span>
+                주요 활용 범위
+              </span>
 
-      {/* 2. Application Context & Background */}
-      <Card>
-        <CardContent className="grid gap-6 p-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
-          {/* Main heading + environment */}
-          <div className="flex flex-col gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Building2 className="size-5" />
-            </span>
-            <h2 className="text-base font-semibold text-pretty">적용 환경 및 배경</h2>
-            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{ctx.environment}</p>
-          </div>
-
-          <ContextBlock icon={HelpCircle} title="등장 배경" body={ctx.background} />
-          <ContextBlock icon={Target} title="이 페어의 목적" body={ctx.purpose} />
-          <ContextBlock icon={Zap} title="핵심 강점" body={ctx.strength} />
-
-          {/* Scope tags */}
-          <div className="flex flex-col gap-3">
-            <span className="flex items-center gap-2 text-sm font-medium">
-              <Sparkles className="size-4 text-primary" />
-              주요 활용 범위
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {ctx.scope.map((s) => (
-                <Badge key={s} variant="secondary" className="font-normal">
-                  {s}
-                </Badge>
-              ))}
+              <div className="flex flex-wrap gap-2">
+                {ctx.scope.map((scope) => (
+                  <Badge
+                    key={scope}
+                    variant="secondary"
+                    className="rounded-md px-2.5 py-1 font-normal"
+                  >
+                    {scope}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </div>
         </CardContent>
@@ -316,40 +267,68 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
       {/* 3. Details: Training / Performance / I-O Summary */}
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">세부 사항</h2>
-        <Card>
-          <CardContent className="grid gap-0 p-0 lg:grid-cols-3">
-            {/* Training Information */}
-            <div className="flex flex-col gap-4 p-6">
-              <span className="flex items-center gap-2 text-sm font-semibold">
-                <Timer className="size-4 text-primary" />
-                학습 정보 (Training Information)
-              </span>
-              <div className="flex flex-col divide-y divide-border/60">
-                {training.map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
-                    <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                      <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                        {label}
-                      </span>
-                      <span
-                        className="min-w-0 truncate whitespace-nowrap text-right text-sm font-medium"
-                        title={value}
-                      >
-                        {value}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Performance Results */}
-            <div className="flex flex-col gap-4 border-t border-border p-6 lg:border-l lg:border-t-0">
-              <span className="flex items-center gap-2 text-sm font-semibold">
-                <Gauge className="size-4 text-primary" />
-                성능 결과 (Performance Results)
-              </span>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatTile
+            label="AI 유형"
+            value={pair.task}
+            accent
+          />
+
+          <StatTile
+            label="라벨 수"
+            value={pair.dataset.classCount}
+            suffix="종"
+          />
+
+          <StatTile
+            label="전체 샘플"
+            value={pair.dataset.totalSamples}
+          />
+
+          <StatTile
+            label="파일 형식"
+            value={pair.dataset.storage.fileType}
+          />
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="size-4 text-primary" />
+                기본 정보
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <p className="leading-relaxed text-muted-foreground">{pair.description}</p>
+              <Separator />
+              <div>
+                <InfoRow label="데이터셋" value={pair.dataset.name} />
+                <InfoRow label="모델" value={pair.model.name} />
+                <InfoRow label="생성일" value={pair.dataset.createdAt} />
+                <InfoRow label="라이선스" value={pair.license} />
+                <InfoRow
+                  label="검증 상태"
+                  value={
+                    <Badge variant={isValidated ? "default" : "secondary"} className="gap-1">
+                      <CheckCircle2 className="size-3.5" />
+                      {isValidated ? "검증 완료" : "검증 대기"}
+                    </Badge>
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Timer className="size-4 text-primary" />
+                학습 및 성능 요약
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-2">
                 {metrics.map((m) => (
                   <div key={m.label} className="flex flex-col gap-0.5 rounded-xl border border-border p-3">
@@ -358,62 +337,132 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
                   </div>
                 ))}
               </div>
-              <ConfusionMatrix matrix={matrix} />
-              <Link
-                href={`/models/${pair.model.id}`}
-                className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-              >
-                전체 평가 리포트 보기
-                <ArrowRight className="size-3.5" />
-              </Link>
-            </div>
 
-            {/* Input / Output Summary */}
-            <div className="flex flex-col gap-4 border-t border-border p-6 lg:border-l lg:border-t-0">
-              <span className="flex items-center gap-2 text-sm font-semibold">
-                <ArrowRightLeft className="size-4 text-primary" />
-                입출력 요약 (I/O Summary)
-              </span>
-
-              <div className="flex items-stretch gap-2">
-                {/* Input */}
-                <div className="flex flex-1 flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
-                  <span className="text-xs font-semibold text-primary">Input</span>
-                  <span className="text-sm font-medium">{io.input.type}</span>
-                  <IoRow label="형식" value={io.input.format} />
-                  <IoRow label="크기" value={io.input.shape} />
-                  <IoRow label="설명" value={io.input.description} />
-                </div>
-
-                <span className="flex items-center text-muted-foreground">
-                  <ArrowRight className="size-5" />
-                </span>
-
-                {/* Output */}
-                <div className="flex flex-1 flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
-                  <span className="text-xs font-semibold text-chart-3">Output</span>
-                  <span className="text-sm font-medium">{io.output.type}</span>
-                  <IoRow label="형식" value={io.output.format} />
-                  <IoRow label="클래스 수" value={`${io.output.classes}`} />
-                  <IoRow label="설명" value={io.output.description} />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  라벨 클래스 ({io.labels.length}종)
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {io.labels.map((l) => (
-                    <Badge key={l} variant="outline" className="font-normal">
-                      {l}
-                    </Badge>
+              <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
+                <span className="text-xs font-medium text-muted-foreground">학습 정보</span>
+                <div className="flex flex-col gap-2">
+                  {training.slice(0, 4).map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <Icon className="size-3.5 text-primary" />
+                        {label}
+                      </span>
+                      <span className="text-right font-medium">{value}</span>
+                    </div>
                   ))}
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[0.75fr_1.65fr]">
+          {/* Dataset Summary */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Database className="size-4" />
+                </span>
+                데이터셋 요약
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent>
+              <div className="flex flex-col divide-y divide-border">
+                <SummaryRow
+                  label="데이터 종류"
+                  value="이미지"
+                />
+
+                <SummaryRow
+                  label="전체 샘플"
+                  value={`${pair.dataset.totalSamples} 장`}
+                />
+
+                <SummaryRow
+                  label="라벨 수"
+                  value={`${pair.dataset.classCount} 종`}
+                />
+
+                <SummaryRow
+                  label="파일 형식"
+                  value={pair.dataset.storage.fileType}
+                />
+
+                <SummaryRow
+                  label="생성일"
+                  value={pair.dataset.createdAt}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Input / Output Summary */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <ArrowRightLeft className="size-4" />
+                </span>
+                입출력 요약
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent>
+              <div className="grid gap-6 xl:grid-cols-2">
+                {/* Input */}
+                <section className="min-w-0 xl:border-r xl:border-border xl:pr-6">
+                  <div className="mb-5 flex flex-col divide-y divide-border">
+                    <SummaryRow
+                      label="입력 형태"
+                      value={io.input.type}
+                    />
+
+                    <SummaryRow
+                      label="데이터 명"
+                      value={pair.dataset.name}
+                    />
+                  </div>
+
+                  <DimensionTable
+                    headers={["항목", "차원", "의미"]}
+                    rows={[
+                      ["1", "1", "Batch"],
+                      ["2", "3", "Channel"],
+                      ["3", "1280", "Height"],
+                      ["4", "1280", "Width"],
+                    ]}
+                  />
+                </section>
+
+                {/* Output */}
+                <section className="min-w-0">
+                  <div className="mb-5 flex flex-col divide-y divide-border">
+                    <SummaryRow
+                      label="출력 형태"
+                      value={io.output.type}
+                    />
+
+                    <SummaryRow
+                      label="출력 항목"
+                      value="결함 위치 / 결함 종류 / 신뢰도"
+                    />
+                  </div>
+
+                  <DimensionTable
+                    headers={["항목", "차원", "결과"]}
+                    rows={[
+                      ["boxes", "[N, 4]", "결함 영역 좌표 (xyxy)"],
+                      ["scores", "[N]", "검출 신뢰도"],
+                      ["classes", "[N]", "결함 클래스 인덱스"],
+                    ]}
+                  />
+                </section>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* 4. Dataset preview / Model preview */}
@@ -435,7 +484,6 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
                 <div className="flex flex-col gap-1">
                   <span className="font-semibold leading-tight text-pretty">{pair.dataset.name}</span>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                    <span>{pair.dataset.labelType}</span>
                     <span className="text-border">|</span>
                     <span>{pair.dataset.totalSamples} 장</span>
                     <span className="text-border">|</span>
@@ -480,9 +528,9 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <span>{pair.model.framework}</span>
                     <span className="text-border">|</span>
-                    <span>{pair.model.version}</span>
-                    <span className="text-border">|</span>
                     <span>{pair.model.task}</span>
+                    <span className="text-border">|</span>
+                    <span>{pair.model.version}</span>
                   </div>
                 </div>
               </div>
@@ -521,26 +569,29 @@ function ContextBlock({
   body: string
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <Icon className="size-4 text-primary" />
-        {title}
-      </span>
-      <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{body}</p>
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-4" />
+        </span>
+
+        <h3 className="text-sm font-semibold text-foreground">
+          {title}
+        </h3>
+      </div>
+
+      <p className="text-pretty text-sm leading-6 text-muted-foreground">
+        {body}
+      </p>
     </div>
   )
 }
 
 function IoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 items-start justify-between gap-2 text-xs">
-      <span className="shrink-0 whitespace-nowrap text-muted-foreground">{label}</span>
-      <span
-        className="min-w-0 truncate whitespace-nowrap text-right font-medium"
-        title={value}
-      >
-        {value}
-      </span>
+    <div className="flex items-start justify-between gap-2 text-xs">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="text-right font-medium text-pretty">{value}</span>
     </div>
   )
 }
@@ -623,6 +674,67 @@ function ConfusionMatrix({
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-4 first:pt-0">
+      <span className="shrink-0 text-sm text-muted-foreground">
+        {label}
+      </span>
+
+      <span className="min-w-0 text-right text-sm font-medium text-foreground text-pretty">
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function DimensionTable({
+  headers,
+  rows,
+}: {
+  headers: [string, string, string]
+  rows: [string, string, string][]
+}) {
+  return (
+    <div className="mt-5 overflow-hidden rounded-xl border border-border">
+      <div className="grid grid-cols-[0.7fr_0.8fr_1.5fr] bg-muted/40 text-xs font-medium text-muted-foreground">
+        {headers.map((header) => (
+          <span key={header} className="px-3 py-2.5">
+            {header}
+          </span>
+        ))}
+      </div>
+
+      <div className="divide-y divide-border">
+        {rows.map(([item, dimension, description]) => (
+          <div
+            key={`${item}-${dimension}`}
+            className="grid grid-cols-[0.7fr_0.8fr_1.5fr] items-center text-sm"
+          >
+            <span className="px-3 py-3 font-mono text-xs">
+              {item}
+            </span>
+
+            <span className="px-3 py-3 font-mono text-xs">
+              {dimension}
+            </span>
+
+            <span className="px-3 py-3 text-muted-foreground">
+              {description}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   )

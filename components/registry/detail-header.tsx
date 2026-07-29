@@ -1,6 +1,6 @@
 "use client"
 
-import { Download, Star } from "lucide-react"
+import { Cpu, Database, Download, Link2, Star } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
@@ -21,6 +21,7 @@ import type { VersionEntry } from "@/lib/registry-data"
 import { cn } from "@/lib/utils"
 
 type DetailHeaderProps = {
+  layout?: "default" | "pair"
   image: string
   imageAlt: string
   title: string
@@ -46,9 +47,24 @@ type DetailHeaderProps = {
   }
   /** Extra action buttons rendered alongside the favorite / primary action. */
   actions?: React.ReactNode
+  pairInfo?: {
+    dataset: {
+      name: string
+      totalSamples: string
+      classCount: number
+      fileType: string
+    }
+    model: {
+      name: string
+      framework: string
+      version: string
+      task: string
+    }
+  }
 }
 
 export function DetailHeader({
+  layout = "default",
   image,
   imageAlt,
   title,
@@ -60,16 +76,44 @@ export function DetailHeader({
   stats,
   primaryAction,
   actions,
+  pairInfo,
 }: DetailHeaderProps) {
+  const isPairLayout = layout === "pair"
   const [favorite, setFavorite] = useState(false)
   const [selectedVersion, setSelectedVersion] = useState(version)
   const PrimaryIcon = primaryAction?.icon
 
   const hasHistory = !!versions && versions.length > 1
   const latestVersion = versions?.[0]?.version ?? version
-  const selectedEntry = versions?.find((item) => item.version === selectedVersion)
-  const viewingPrevious = hasHistory && selectedVersion !== latestVersion
+  const selectedEntry = versions?.find(
+    (item) => item.version === selectedVersion,
+  )
+  const viewingPrevious =
+    hasHistory && selectedVersion !== latestVersion
 
+  if (isPairLayout && pairInfo) {
+    return (
+      <PairDetailHeader
+        image={image}
+        imageAlt={imageAlt}
+        breadcrumb={breadcrumb}
+        tags={tags}
+        badges={badges}
+        pairInfo={pairInfo}
+        primaryAction={primaryAction}
+        favorite={favorite}
+        onFavoriteChange={() => {
+          setFavorite((current) => !current)
+
+          toast.success(
+            favorite
+              ? "즐겨찾기에서 제거했습니다"
+              : "즐겨찾기에 추가했습니다",
+          )
+        }}
+      />
+    )
+  }
   return (
     <div className="flex flex-col gap-5">
       <Breadcrumb>
@@ -94,7 +138,14 @@ export function DetailHeader({
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="grid gap-5 rounded-2xl border border-border bg-card p-4 ring-1 ring-foreground/5 md:grid-cols-[128px_minmax(0,1fr)_390px] md:items-stretch md:p-5">
+      <div
+        className={cn(
+          "grid gap-5 rounded-2xl border border-border bg-card p-4 ring-1 ring-foreground/5 md:items-stretch md:p-5",
+          isPairLayout
+            ? "md:grid-cols-[128px_minmax(0,1fr)_auto]"
+            : "md:grid-cols-[128px_minmax(0,1fr)_390px]",
+        )}
+      >
         {/* 왼쪽: 썸네일 */}
         <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-muted md:aspect-square md:size-32">
           <Image
@@ -125,7 +176,7 @@ export function DetailHeader({
           </div>
 
           <h1
-            className="mt-5 min-w-0 text-2xl font-semibold tracking-tight md:truncate md:whitespace-nowrap md:text-3xl"
+            className="mt-5 min-w-0 text-2xl font-semibold tracking-tight md:truncate md:whitespace-nowrap md:text-2xl"
             title={title}
           >
             {title}
@@ -151,7 +202,14 @@ export function DetailHeader({
         </div>
 
         {/* 오른쪽: 상단 AAS 액션 + 즐겨찾기, 하단 통계 + Deploy */}
-        <div className="flex min-w-0 flex-col justify-between gap-5">
+        <div
+          className={cn(
+            "flex min-w-0 gap-5",
+            isPairLayout
+              ? "items-start justify-end"
+              : "flex-col justify-between",
+          )}
+        >
           {/* 상단 액션 */}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {actions}
@@ -182,6 +240,7 @@ export function DetailHeader({
           </div>
 
           {/* 하단: 다운로드 수 / 즐겨찾기 수 / Deploy 한 줄 정렬 */}
+          {!isPairLayout && (
           <div className="flex flex-wrap items-center justify-end gap-y-4 sm:flex-nowrap sm:gap-y-0">
             {stats?.[0] && (
               <div className="flex min-w-24 flex-1 items-center justify-center gap-3 px-2 sm:min-w-32 sm:flex-none sm:px-4">
@@ -250,8 +309,148 @@ export function DetailHeader({
               </>
             )}
           </div>
+          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+type PairDetailHeaderProps = {
+  image: string
+  imageAlt: string
+  breadcrumb: { label: string; href: string }
+  tags: string[]
+  badges: React.ReactNode
+  pairInfo: NonNullable<DetailHeaderProps["pairInfo"]>
+  primaryAction?: DetailHeaderProps["primaryAction"]
+  favorite: boolean
+  onFavoriteChange: () => void
+}
+
+function PairDetailHeader({
+  image,
+  imageAlt,
+  breadcrumb,
+  tags,
+  badges,
+  pairInfo,
+  primaryAction,
+  favorite,
+  onFavoriteChange,
+}: PairDetailHeaderProps) {
+  const { dataset, model } = pairInfo
+  const PrimaryIcon = primaryAction?.icon
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href="/" />}>Home</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link href={breadcrumb.href} />}>
+              {breadcrumb.label}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{dataset.name} → {model.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
+      <section className="relative overflow-hidden rounded-3xl border border-border bg-card p-5 ring-1 ring-foreground/5 md:p-7">
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="즐겨찾기"
+          aria-pressed={favorite}
+          onClick={onFavoriteChange}
+          className="absolute right-5 top-5 z-10 h-12 w-12 rounded-xl md:right-7 md:top-7"
+        >
+          <Star className={cn("size-4", favorite && "fill-amber-400 text-amber-400")} />
+        </Button>
+
+        <div className="grid gap-6 pr-0 md:grid-cols-[180px_minmax(0,1fr)] md:gap-8 md:pr-14">
+          <div className="relative aspect-square w-full max-w-[180px] overflow-hidden rounded-2xl bg-muted">
+            <Image src={image || "/placeholder.svg"} alt={imageAlt} fill className="object-cover" sizes="180px" />
+          </div>
+
+          <div className="flex min-w-0 flex-col">
+            <span className="text-sm font-semibold text-primary">AI Asset Pair</span>
+
+            <div className="mt-7 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] lg:items-center">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-chart-3/10 px-3 py-1 text-sm font-medium text-chart-3">
+                  <Database className="size-4" />
+                  AI Dataset
+                </div>
+                <h1 className="mt-3 text-xl font-semibold tracking-tight text-pretty md:text-2xl">{dataset.name}</h1>
+              </div>
+
+              <div className="flex flex-col items-center justify-center gap-2 py-2">
+                <div className="flex w-full items-center gap-3">
+                  <span className="h-px flex-1 border-t border-dashed border-primary/40" />
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/5 text-primary">
+                    <Link2 className="size-5" />
+                  </span>
+                  <span className="relative h-px flex-1 border-t border-dashed border-primary/40">
+                    <span className="absolute -right-0.5 -top-[5px] size-2 rotate-45 border-r border-t border-primary/60" />
+                  </span>
+                </div>
+                <span className="whitespace-nowrap text-sm font-semibold text-primary">Used for Training</span>
+              </div>
+
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+                  <Cpu className="size-4" />
+                  AI Model
+                </div>
+                <h2 className="mt-3 text-xl font-semibold tracking-tight text-pretty md:text-2xl">{model.name}</h2>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {badges}
+                {tags.map((tag) => (
+                  <Badge key={tag} variant="ghost" className="text-muted-foreground">#{tag}</Badge>
+                ))}
+              </div>
+
+              {primaryAction && PrimaryIcon && (
+                primaryAction.href ? (
+                  <Button
+                    nativeButton={false}
+                    render={
+                      <Link
+                        href={primaryAction.href}
+                        target={primaryAction.newTab ? "_blank" : undefined}
+                        rel={primaryAction.newTab ? "noopener noreferrer" : undefined}
+                      />
+                    }
+                    className="h-12 rounded-2xl px-6 text-base"
+                  >
+                    <PrimaryIcon className="size-5" />
+                    {primaryAction.label}
+                  </Button>
+                ) : (
+                  <Button
+                    className="h-12 rounded-2xl px-6 text-base"
+                    onClick={() => toast.info(`${primaryAction.label} 요청을 시작했습니다`)}
+                  >
+                    <PrimaryIcon className="size-5" />
+                    {primaryAction.label}
+                  </Button>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
