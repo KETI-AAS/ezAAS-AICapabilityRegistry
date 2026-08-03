@@ -42,6 +42,16 @@ export type TreeNode = {
   id: string
   label: string
   type: AasNodeType
+  /** Identifier and source metadata retained from the original AAS object. */
+  externalId?: string
+  idShort?: string
+  modelType?: string
+  /** JSON path used to map a tree edit back to the source metadata. */
+  valuePath?: string
+  /** Original, unformatted value and source object retained for detail views. */
+  originalValue?: unknown
+  rawData?: Record<string, unknown>
+  conceptDescription?: ConceptDescription
   /** Optional scalar value shown for leaf nodes (e.g. Property value). */
   value?: string
   /** Optional short tag shown next to the label (e.g. valueType, count). */
