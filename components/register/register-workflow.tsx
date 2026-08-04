@@ -18,13 +18,13 @@ import {
   UploadCloud,
   X,
 } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -43,7 +43,7 @@ import {
 } from "@/lib/aas/extract-metadata"
 import { parseAasTree } from "@/lib/aas/parse-aas-tree"
 import { sampleInstances, type SampleInstance } from "@/lib/aas/sample-instances"
-import { dataTypes, frameworks, taskTypes } from "@/lib/registry-data"
+import { taskTypes } from "@/lib/registry-data"
 import { cn } from "@/lib/utils"
 
 /** Result of loading an AAS environment (upload or external import). */
@@ -90,11 +90,16 @@ type ModelForm = {
 /** Registration exposes only two visibility-style licenses. */
 const registrationLicenses = ["Public", "Internal"] as const
 
-const kindLabel: Record<AssetKind, string> = {
-  dataset: "AI Dataset",
-  model: "AI ModelNameplate",
-  none: "사용 안 함",
-}
+/** Keep the file-upload implementation available until the feature is released. */
+const fileUploadEnabled = false
+
+const hubInstances = sampleInstances.map((instance) => {
+  const instanceAnalysis = analyzeAas(instance.env)
+  const hasDataset = instanceAnalysis.submodels.some((submodel) => submodel.autoKind === "dataset")
+  const hasModel = instanceAnalysis.submodels.some((submodel) => submodel.autoKind === "model")
+
+  return { instance, canImport: hasDataset && hasModel }
+})
 
 /* ------------------------------------------------------------------ */
 /* Small building blocks                                               */
@@ -148,13 +153,15 @@ function GroupTitle({
   title,
   description,
 }: {
-  step: string
+  step?: string
   title: string
   description?: string
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium uppercase tracking-wide text-primary">{step}</span>
+      {step && (
+        <span className="text-xs font-medium uppercase tracking-wide text-primary">{step}</span>
+      )}
       <h3 className="text-base font-semibold">{title}</h3>
       {description && <p className="text-sm text-muted-foreground text-pretty">{description}</p>}
     </div>
@@ -204,7 +211,7 @@ function UploadZone({
           ) : (
             <span className="flex items-center gap-1 text-xs text-chart-2">
               <CheckCircle2 className="size-3.5" />
-              {upload.source === "import" ? " ezAAS 가져오기 완료" : "AAS 업로드 완료"}
+              {upload.source === "import" ? "ezAAS 허브에서 가져오기 완료" : "AAS 업로드 완료"}
             </span>
           )}
         </div>
@@ -263,28 +270,41 @@ function ImportPanel({ onImport }: { onImport: (instance: SampleInstance) => voi
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <Server className="size-3.5 text-primary" />
-        연결된 AAS 저장소에서 내 Instance를 선택해 가져옵니다.
+        ezAAS 허브에서 내 Instance를 선택해 가져옵니다.
       </div>
-      {sampleInstances.map((inst) => (
-        <div
-          key={inst.id}
-          className="flex items-center gap-3 rounded-xl border border-border bg-card p-4"
-        >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Boxes className="size-5" />
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm font-medium">{inst.name}</span>
-            <span className="truncate text-xs text-muted-foreground">
-              {inst.platform} · {inst.contains} · {inst.updatedAt}
+      {hubInstances.map(({ instance: inst, canImport }) => {
+        return (
+          <div
+            key={inst.id}
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Boxes className="size-5" />
             </span>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{inst.name}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                {inst.platform} · {inst.contains} · {inst.updatedAt}
+              </span>
+              {!canImport && (
+                <span className="text-xs text-destructive">
+                  AI Dataset과 AI ModelNameplate가 모두 필요합니다.
+                </span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canImport}
+              title={canImport ? undefined : "AI Dataset과 AI ModelNameplate가 모두 필요합니다."}
+              onClick={() => onImport(inst)}
+            >
+              가져오기
+              <ArrowRight data-icon="inline-end" />
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={() => onImport(inst)}>
-            가져오기
-            <ArrowRight data-icon="inline-end" />
-          </Button>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -308,8 +328,11 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 /* ------------------------------------------------------------------ */
 
 export function RegisterWorkflow() {
+  const router = useRouter()
   const [activeStep, setActiveStep] = useState(1)
-  const [mode, setMode] = useState<"file" | "import">("file")
+  const [registrationComplete, setRegistrationComplete] = useState(false)
+  const [redirectCountdown, setRedirectCountdown] = useState(5)
+  const [mode, setMode] = useState<"file" | "import">("import")
   const [upload, setUpload] = useState<AasUpload>({ status: "empty" })
   const [analysis, setAnalysis] = useState<AasAnalysis | null>(null)
   const [assignments, setAssignments] = useState<Record<string, AssetKind>>({})
@@ -335,11 +358,33 @@ export function RegisterWorkflow() {
     keywords: "",
   })
 
+  useEffect(() => {
+    if (!registrationComplete) return
+
+    const countdownTimer = window.setInterval(() => {
+      setRedirectCountdown((current) => Math.max(0, current - 1))
+    }, 1000)
+    const redirectTimer = window.setTimeout(() => {
+      router.replace("/")
+    }, 5000)
+
+    return () => {
+      window.clearInterval(countdownTimer)
+      window.clearTimeout(redirectTimer)
+    }
+  }, [registrationComplete, router])
+
   function goTo(step: number) {
     setActiveStep(step)
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" })
     }
+  }
+
+  function completeRegistration() {
+    setRedirectCountdown(5)
+    setRegistrationComplete(true)
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   /** Parse + analyze an AAS environment and seed the auto-classification. */
@@ -411,21 +456,50 @@ export function RegisterWorkflow() {
   const hasDataset = !!datasetSm
   const hasModel = !!modelSm
 
-  /* Field resolvers: extracted (locked) values take precedence over input. */
+  /* AAS metadata is read-only; author comes from the signed-in capability account. */
   const dsMeta = datasetMeta as Record<string, string | undefined>
   const mdMeta = modelMeta as Record<string, string | undefined>
   const dsLocked = (f: keyof DatasetForm) => !!dsMeta[f]
   const mdLocked = (f: keyof ModelForm) => !!mdMeta[f]
-  const dsVal = (f: keyof DatasetForm) => (dsMeta[f] ? (dsMeta[f] as string) : datasetInput[f])
-  const mdVal = (f: keyof ModelForm) => (mdMeta[f] ? (mdMeta[f] as string) : modelInput[f])
+  const capabilityAuthorEmail = "amrc@keti.re.kr"
+  const dsVal = (f: keyof DatasetForm) => {
+    if (f === "author") return capabilityAuthorEmail
+    if (f === "task" || f === "license") return datasetInput[f]
+    return dsMeta[f] ?? ""
+  }
+  const mdVal = (f: keyof ModelForm) => {
+    if (f === "author") return capabilityAuthorEmail
+    if (f === "task" || f === "license") return modelInput[f]
+    return mdMeta[f] ?? ""
+  }
   const dsVersion = datasetMeta.version || "v1.0"
   const mdVersion = modelMeta.version || "v1.0"
 
   const isParsed = upload.status === "parsed"
 
-  const inputBase = "h-10 rounded-lg"
-  const textareaBase =
-    "min-h-24 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+  if (registrationComplete) {
+    return (
+      <Card
+        className="flex min-h-96 flex-col items-center justify-center gap-6 p-8 text-center"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="flex size-16 items-center justify-center rounded-full bg-chart-2/15 text-chart-2">
+          <CheckCircle2 className="size-9" />
+        </span>
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xl font-semibold">AI 자산 등록이 완료되었습니다</h2>
+          <p className="text-sm text-muted-foreground">
+            {redirectCountdown}초 후 홈으로 이동합니다.
+          </p>
+        </div>
+        <Button onClick={() => router.replace("/")}>
+          지금 홈으로 이동
+          <ArrowRight data-icon="inline-end" />
+        </Button>
+      </Card>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-10">
@@ -476,7 +550,7 @@ export function RegisterWorkflow() {
         </div>
       </div>
 
-      {/* Step 1 – AAS upload / import */}
+      {/* Step 1 – AAS import (file upload is temporarily hidden) */}
       {activeStep === 1 && (
         <Card className="p-6 md:p-8">
           <div className="flex flex-col gap-8">
@@ -485,7 +559,7 @@ export function RegisterWorkflow() {
                 <Boxes className="size-5" />
               </span>
               <div className="flex min-w-0 flex-col">
-                <h2 className="text-lg font-semibold">AAS 모델 업로드</h2>
+                <h2 className="text-lg font-semibold">ezAAS 허브에서 모델 가져오기</h2>
                 <p className="text-sm text-muted-foreground xl:whitespace-nowrap">
                   통합 AAS에서 AI Dataset과 AI ModelNameplate를 분류하고 메타데이터를 자동
                   추출합니다.
@@ -493,35 +567,37 @@ export function RegisterWorkflow() {
               </div>
             </div>
 
-            {/* Source mode toggle */}
-            <div className="inline-flex w-full max-w-xl gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              <button
-                type="button"
-                onClick={() => setMode("file")}
-                className={cn(
-                  "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
-                  mode === "file"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <UploadCloud className="size-4" />
-                파일 업로드
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("import")}
-                className={cn(
-                  "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
-                  mode === "import"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Server className="size-4" />
-                ezAAS 모델 불러오기
-              </button>
-            </div>
+            {/* File upload stays implemented but hidden until it is ready for release. */}
+            {fileUploadEnabled && (
+              <div className="inline-flex w-full max-w-xl gap-1 rounded-xl border border-border bg-muted/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => setMode("file")}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
+                    mode === "file"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <UploadCloud className="size-4" />
+                  파일 업로드
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("import")}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
+                    mode === "import"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Server className="size-4" />
+                  ezAAS 허브에서 모델 가져오기
+                </button>
+              </div>
+            )}
 
             {mode === "file" ? (
               <UploadZone upload={upload} onFile={handleFile} onClear={clearUpload} />
@@ -620,9 +696,9 @@ export function RegisterWorkflow() {
                 <Sparkles className="size-5" />
               </span>
               <div className="flex flex-col">
-                <h2 className="text-lg font-semibold">추출 결과 확인 및 입력</h2>
+                <h2 className="text-lg font-semibold">메타데이터 확인 및 입력</h2>
                 <p className="text-sm text-muted-foreground">
-                  자동 추출된 값은 잠금 상태입니다. 템플릿에서 찾지 못한 항목만 입력하세요.
+                  AAS에서 가져온 값을 확인하고 Task와 라이선스를 선택하세요.
                 </p>
               </div>
             </div>
@@ -632,71 +708,17 @@ export function RegisterWorkflow() {
                 <AlertCircle />
                 <AlertTitle>업로드된 AAS가 없습니다</AlertTitle>
                 <AlertDescription>
-                  이전 단계에서 통합 AAS 파일을 업로드하거나 'ezAAS에서 내 모델 불러오기'로 가져와 주세요.
+                  이전 단계에서 ezAAS 허브의 모델을 가져와 주세요.
                 </AlertDescription>
               </Alert>
             ) : (
               <>
-                {/* Submodel classification (auto-detected, manually correctable) */}
-                <div className="flex flex-col gap-5">
-                  <GroupTitle
-                    step="Submodel 분류"
-                    title="자동 감지 결과"
-                    description="잘못 분류된 경우 각 Submodel의 유형을 직접 바꿀 수 있습니다."
-                  />
-                  <div className="flex flex-col gap-2">
-                    {analysis.submodels.map((s) => (
-                      <div
-                        key={s.key}
-                        className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
-                      >
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                          <FileJson className="size-4" />
-                        </span>
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{s.idShort}</span>
-                            {s.autoKind !== "none" && (
-                              <Badge
-                                variant="secondary"
-                                className="h-5 gap-1 px-1.5 text-[10px] font-normal text-chart-2"
-                              >
-                                <Sparkles className="size-3" />
-                                자동 감지
-                              </Badge>
-                            )}
-                          </div>
-                          <span className="truncate text-xs text-muted-foreground">
-                            {s.elementCount}개 요소{s.semantic ? ` · ${s.semantic}` : ""}
-                          </span>
-                        </div>
-                        <Select
-                          value={assignments[s.key] ?? "none"}
-                          onValueChange={(v) =>
-                            setAssignments((prev) => ({ ...prev, [s.key]: v as AssetKind }))
-                          }
-                        >
-                          <SelectTrigger className="h-9 w-40 shrink-0 rounded-lg">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="dataset">{kindLabel.dataset}</SelectItem>
-                            <SelectItem value="model">{kindLabel.model}</SelectItem>
-                            <SelectItem value="none">{kindLabel.none}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 {!hasDataset && !hasModel && (
                   <Alert>
                     <AlertCircle />
                     <AlertTitle>분류된 자산이 없습니다</AlertTitle>
                     <AlertDescription>
-                      위 목록에서 하나 이상의 Submodel을 AI Dataset 또는 AI ModelNameplate로
-                      지정해 주세요.
+                      불러온 AAS에서 AI Dataset 또는 AI ModelNameplate Submodel을 찾지 못했습니다.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -705,138 +727,65 @@ export function RegisterWorkflow() {
                 {hasDataset && (
                   <div className="flex flex-col gap-5">
                     <GroupTitle
-                      step="AI Dataset"
-                      title="AI Dataset 메타데이터"
-                      description="자동 추출된 값은 잠겨 있으며, 비어 있는 항목만 입력하세요."
+                      title="AI Dataset"
+                      description="AAS 메타데이터를 확인하고 Task와 라이선스를 선택하세요."
                     />
                     <div className="grid gap-4 md:grid-cols-2">
                       <Field label="제목" auto={dsLocked("title")}>
-                        {dsLocked("title") ? (
-                          <LockedBox value={dsVal("title")} />
-                        ) : (
-                          <Input
-                            className={inputBase}
-                            value={datasetInput.title}
-                            onChange={(e) =>
-                              setDatasetInput({ ...datasetInput, title: e.target.value })
-                            }
-                            placeholder="예: 자동차 외관 이미지"
-                          />
-                        )}
+                        <LockedBox value={dsVal("title")} />
                       </Field>
-                      <Field label="작성자" auto={dsLocked("author")}>
-                        {dsLocked("author") ? (
-                          <LockedBox value={dsVal("author")} />
-                        ) : (
-                          <Input
-                            className={inputBase}
-                            value={datasetInput.author}
-                            onChange={(e) =>
-                              setDatasetInput({ ...datasetInput, author: e.target.value })
-                            }
-                            placeholder="예: 제조혁신팀"
-                          />
-                        )}
+                      <Field label="작성자">
+                        <LockedBox value={capabilityAuthorEmail} />
                       </Field>
                       <Field label="버전" auto={!!datasetMeta.version}>
                         <LockedBox value={dsVersion} />
                       </Field>
                       <Field label="데이터 유형" auto={dsLocked("dataType")}>
-                        {dsLocked("dataType") ? (
-                          <LockedBox value={dsVal("dataType")} />
-                        ) : (
-                          <Select
-                            value={datasetInput.dataType}
-                            onValueChange={(v) =>
-                              setDatasetInput({ ...datasetInput, dataType: v as string })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-full rounded-lg">
-                              <SelectValue placeholder="데이터 유형 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {dataTypes.map((d) => (
-                                <SelectItem key={d} value={d}>
-                                  {d}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <LockedBox value={dsVal("dataType")} />
                       </Field>
-                      <Field label="적용 Task" auto={dsLocked("task")}>
-                        {dsLocked("task") ? (
-                          <LockedBox value={dsVal("task")} />
-                        ) : (
-                          <Select
-                            value={datasetInput.task}
-                            onValueChange={(v) =>
-                              setDatasetInput({ ...datasetInput, task: v as string })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-full rounded-lg">
-                              <SelectValue placeholder="Task 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {taskTypes.map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {t}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                      <Field label="적용 Task">
+                        <Select
+                          value={datasetInput.task}
+                          onValueChange={(v) =>
+                            setDatasetInput({ ...datasetInput, task: v as string })
+                          }
+                        >
+                          <SelectTrigger className="h-10 w-full rounded-lg">
+                            <SelectValue placeholder="Task 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taskTypes.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </Field>
-                      <Field label="라이선스" auto={dsLocked("license")}>
-                        {dsLocked("license") ? (
-                          <LockedBox value={dsVal("license")} />
-                        ) : (
-                          <Select
-                            value={datasetInput.license}
-                            onValueChange={(v) =>
-                              setDatasetInput({ ...datasetInput, license: v as string })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-full rounded-lg">
-                              <SelectValue placeholder="라이선스 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {registrationLicenses.map((l) => (
-                                <SelectItem key={l} value={l}>
-                                  {l}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                      <Field label="라이선스">
+                        <Select
+                          value={datasetInput.license}
+                          onValueChange={(v) =>
+                            setDatasetInput({ ...datasetInput, license: v as string })
+                          }
+                        >
+                          <SelectTrigger className="h-10 w-full rounded-lg">
+                            <SelectValue placeholder="라이선스 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {registrationLicenses.map((l) => (
+                              <SelectItem key={l} value={l}>
+                                {l}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </Field>
                       <Field label="개요" className="md:col-span-2" auto={dsLocked("summary")}>
-                        {dsLocked("summary") ? (
-                          <LockedBox value={dsVal("summary")} />
-                        ) : (
-                          <textarea
-                            className={textareaBase}
-                            value={datasetInput.summary}
-                            onChange={(e) =>
-                              setDatasetInput({ ...datasetInput, summary: e.target.value })
-                            }
-                            placeholder="데이터셋에 대한 간단한 설명을 입력하세요."
-                          />
-                        )}
+                        <LockedBox value={dsVal("summary")} />
                       </Field>
                       <Field label="키워드" className="md:col-span-2" auto={dsLocked("keywords")}>
-                        {dsLocked("keywords") ? (
-                          <LockedBox value={dsVal("keywords")} />
-                        ) : (
-                          <Input
-                            className={inputBase}
-                            value={datasetInput.keywords}
-                            onChange={(e) =>
-                              setDatasetInput({ ...datasetInput, keywords: e.target.value })
-                            }
-                            placeholder="쉼표로 구분 (예: 외관검사, 자동차, 품질)"
-                          />
-                        )}
+                        <LockedBox value={dsVal("keywords")} />
                       </Field>
                     </div>
                   </div>
@@ -846,138 +795,65 @@ export function RegisterWorkflow() {
                 {hasModel && (
                   <div className="flex flex-col gap-5">
                     <GroupTitle
-                      step="AI ModelNameplate"
-                      title="AI ModelNameplate 메타데이터"
-                      description="자동 추출된 값은 잠겨 있으며, 비어 있는 항목만 입력하세요."
+                      title="AI ModelNameplate"
+                      description="AAS 메타데이터를 확인하고 Task와 라이선스를 선택하세요."
                     />
                     <div className="grid gap-4 md:grid-cols-2">
                       <Field label="제목" auto={mdLocked("title")}>
-                        {mdLocked("title") ? (
-                          <LockedBox value={mdVal("title")} />
-                        ) : (
-                          <Input
-                            className={inputBase}
-                            value={modelInput.title}
-                            onChange={(e) =>
-                              setModelInput({ ...modelInput, title: e.target.value })
-                            }
-                            placeholder="예: YOLOv8 자동차 외관 검사"
-                          />
-                        )}
+                        <LockedBox value={mdVal("title")} />
                       </Field>
-                      <Field label="작성자" auto={mdLocked("author")}>
-                        {mdLocked("author") ? (
-                          <LockedBox value={mdVal("author")} />
-                        ) : (
-                          <Input
-                            className={inputBase}
-                            value={modelInput.author}
-                            onChange={(e) =>
-                              setModelInput({ ...modelInput, author: e.target.value })
-                            }
-                            placeholder="예: 비전AI팀"
-                          />
-                        )}
+                      <Field label="작성자">
+                        <LockedBox value={capabilityAuthorEmail} />
                       </Field>
                       <Field label="버전" auto={!!modelMeta.version}>
                         <LockedBox value={mdVersion} />
                       </Field>
                       <Field label="Framework" auto={mdLocked("framework")}>
-                        {mdLocked("framework") ? (
-                          <LockedBox value={mdVal("framework")} />
-                        ) : (
-                          <Select
-                            value={modelInput.framework}
-                            onValueChange={(v) =>
-                              setModelInput({ ...modelInput, framework: v as string })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-full rounded-lg">
-                              <SelectValue placeholder="Framework 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {frameworks.map((f) => (
-                                <SelectItem key={f} value={f}>
-                                  {f}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <LockedBox value={mdVal("framework")} />
                       </Field>
-                      <Field label="Task" auto={mdLocked("task")}>
-                        {mdLocked("task") ? (
-                          <LockedBox value={mdVal("task")} />
-                        ) : (
-                          <Select
-                            value={modelInput.task}
-                            onValueChange={(v) =>
-                              setModelInput({ ...modelInput, task: v as string })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-full rounded-lg">
-                              <SelectValue placeholder="Task 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {taskTypes.map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {t}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                      <Field label="Task">
+                        <Select
+                          value={modelInput.task}
+                          onValueChange={(v) =>
+                            setModelInput({ ...modelInput, task: v as string })
+                          }
+                        >
+                          <SelectTrigger className="h-10 w-full rounded-lg">
+                            <SelectValue placeholder="Task 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taskTypes.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </Field>
-                      <Field label="라이선스" auto={mdLocked("license")}>
-                        {mdLocked("license") ? (
-                          <LockedBox value={mdVal("license")} />
-                        ) : (
-                          <Select
-                            value={modelInput.license}
-                            onValueChange={(v) =>
-                              setModelInput({ ...modelInput, license: v as string })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-full rounded-lg">
-                              <SelectValue placeholder="라이선스 선택" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {registrationLicenses.map((l) => (
-                                <SelectItem key={l} value={l}>
-                                  {l}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                      <Field label="라이선스">
+                        <Select
+                          value={modelInput.license}
+                          onValueChange={(v) =>
+                            setModelInput({ ...modelInput, license: v as string })
+                          }
+                        >
+                          <SelectTrigger className="h-10 w-full rounded-lg">
+                            <SelectValue placeholder="라이선스 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {registrationLicenses.map((l) => (
+                              <SelectItem key={l} value={l}>
+                                {l}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </Field>
                       <Field label="개요" className="md:col-span-2" auto={mdLocked("summary")}>
-                        {mdLocked("summary") ? (
-                          <LockedBox value={mdVal("summary")} />
-                        ) : (
-                          <textarea
-                            className={textareaBase}
-                            value={modelInput.summary}
-                            onChange={(e) =>
-                              setModelInput({ ...modelInput, summary: e.target.value })
-                            }
-                            placeholder="모델에 대한 간단한 설명을 입력하세요."
-                          />
-                        )}
+                        <LockedBox value={mdVal("summary")} />
                       </Field>
                       <Field label="키워드" className="md:col-span-2" auto={mdLocked("keywords")}>
-                        {mdLocked("keywords") ? (
-                          <LockedBox value={mdVal("keywords")} />
-                        ) : (
-                          <Input
-                            className={inputBase}
-                            value={modelInput.keywords}
-                            onChange={(e) =>
-                              setModelInput({ ...modelInput, keywords: e.target.value })
-                            }
-                            placeholder="쉼표로 구분 (예: 실시간, 외관검사, YOLO)"
-                          />
-                        )}
+                        <LockedBox value={mdVal("keywords")} />
                       </Field>
                     </div>
                   </div>
@@ -1086,7 +962,7 @@ export function RegisterWorkflow() {
                 <ArrowLeft data-icon="inline-start" />
                 이전
               </Button>
-              <Button size="lg">
+              <Button size="lg" onClick={completeRegistration}>
                 <CheckCircle2 data-icon="inline-start" />
                 등록 완료
               </Button>

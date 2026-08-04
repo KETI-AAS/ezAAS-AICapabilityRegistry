@@ -30,6 +30,15 @@ export interface DatasetStorage {
   annotationFormat: string
 }
 
+export interface DatasetColumn {
+  name: string
+  label: string
+  type: "string" | "number" | "datetime" | "image"
+  description: string
+  unit?: string
+  required?: boolean
+}
+
 export interface DatasetTraceability {
   contactOrg: string
   /** Team/department responsible for the dataset. */
@@ -192,6 +201,8 @@ export interface Dataset {
   task: TaskType
   industry: Industry
   dataType: DataType
+  /** Columns supplied as one inference record when trying the linked model. */
+  columns: DatasetColumn[]
   distribution: DatasetClass[]
   storage: DatasetStorage
   directoryStructure: string[]
@@ -225,6 +236,15 @@ export const datasets: Dataset[] = [
     task: "Object Detection",
     industry: "자동차",
     dataType: "이미지",
+    columns: [
+      {
+        name: "image",
+        label: "자동차 외관 이미지",
+        type: "image",
+        description: "추론할 자동차 외관 이미지 파일을 선택합니다.",
+        required: true,
+      },
+    ],
     distribution: [
       { label: "Scratch", value: 3200 },
       { label: "Dent", value: 2780 },
@@ -292,6 +312,15 @@ export const datasets: Dataset[] = [
     task: "OCR",
     industry: "기타",
     dataType: "이미지",
+    columns: [
+      {
+        name: "document_image",
+        label: "문서 이미지",
+        type: "image",
+        description: "OCR을 수행할 문서 이미지 파일을 선택합니다.",
+        required: true,
+      },
+    ],
     distribution: [
       { label: "Printed", value: 6120 },
       { label: "Handwritten", value: 2800 },
@@ -351,6 +380,32 @@ export const datasets: Dataset[] = [
     task: "Anomaly Detection",
     industry: "기계·장비",
     dataType: "시계열",
+    columns: [
+      {
+        name: "TEMP_01",
+        label: "설비 온도",
+        type: "number",
+        description: "현재 측정된 설비의 온도를 입력합니다.",
+        unit: "°C",
+        required: true,
+      },
+      {
+        name: "VIB_VEL",
+        label: "진동 속도",
+        type: "number",
+        description: "현재 측정된 설비의 진동 속도를 입력합니다.",
+        unit: "mm/s",
+        required: true,
+      },
+      {
+        name: "MOTOR_A",
+        label: "모터 전류",
+        type: "number",
+        description: "현재 측정된 모터의 전류값을 입력합니다.",
+        unit: "A",
+        required: true,
+      },
+    ],
     distribution: [
       { label: "Normal", value: 1280 },
       { label: "Bearing Wear", value: 340 },
@@ -412,6 +467,15 @@ export const datasets: Dataset[] = [
     task: "Segmentation",
     industry: "전자·반도체",
     dataType: "이미지",
+    columns: [
+      {
+        name: "image",
+        label: "PCB 현미경 이미지",
+        type: "image",
+        description: "분할할 PCB 현미경 이미지 파일을 선택합니다.",
+        required: true,
+      },
+    ],
     distribution: [
       { label: "Solder", value: 1400 },
       { label: "Open Circuit", value: 1100 },

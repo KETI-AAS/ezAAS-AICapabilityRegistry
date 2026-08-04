@@ -5,7 +5,7 @@ import { RegisterWorkflow } from "@/components/register/register-workflow"
 export const metadata: Metadata = {
   title: "AI 자산 등록 — AI Model Registry",
   description:
-    "통합 AAS 파일을 업로드하거나 'ezAAS에서 내 모델 불러오기'로 가져오면 AI Dataset과 AI ModelNameplate를 자동 분류하고 메타데이터를 추출하여 레지스트리에 등록합니다.",
+    "ezAAS 허브에서 모델을 가져오면 AI Dataset과 AI ModelNameplate를 자동 분류하고 메타데이터를 추출하여 레지스트리에 등록합니다.",
 }
 
 export default function RegisterPage() {
@@ -18,8 +18,7 @@ export default function RegisterPage() {
             AI 자산 등록
           </h1>
           <p className="text-sm leading-relaxed text-muted-foreground md:text-base xl:whitespace-nowrap">
-            통합 AAS를 업로드하거나 ezAAS 모델을 불러오면 Dataset·ModelNameplate 메타데이터를
-            자동 추출합니다.
+            ezAAS 허브에서 모델을 가져오면 Dataset·ModelNameplate 메타데이터를 자동 추출합니다.
           </p>
         </div>
       </section>

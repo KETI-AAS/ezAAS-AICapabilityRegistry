@@ -126,6 +126,53 @@ const predictiveMaintenance: AasEnvironment = {
   conceptDescriptions: [],
 }
 
+/** Example that cannot be imported because it has no AI ModelNameplate. */
+const datasetOnly: AasEnvironment = {
+  assetAdministrationShells: [
+    {
+      idShort: "LegacyVisionDatasetAAS",
+      id: "https://factory.example/aas/legacy-vision-dataset",
+      description: [{ language: "ko", text: "AI Dataset만 등록된 레거시 비전 자산" }],
+      assetInformation: {
+        assetKind: "Instance",
+        globalAssetId: "urn:factory:asset:legacy-vision-dataset:003",
+      },
+      submodels: [
+        { type: "ModelReference", keys: [{ type: "Submodel", value: "urn:sm:dataset:legacy-vision" }] },
+      ],
+    },
+  ],
+  submodels: [
+    {
+      idShort: "AIDatasetNameplate",
+      id: "urn:sm:dataset:legacy-vision",
+      kind: "Instance",
+      semanticId: {
+        type: "ExternalReference",
+        keys: [
+          { type: "GlobalReference", value: "https://admin-shell.io/idta/AIDataset/1/0" },
+        ],
+      },
+      description: [{ language: "ko", text: "레거시 부품 검사 이미지 데이터셋" }],
+      submodelElements: [
+        {
+          idShort: "DatasetName",
+          modelType: "Property",
+          valueType: "xs:string",
+          value: "레거시 부품 검사 이미지",
+        },
+        {
+          idShort: "DataType",
+          modelType: "Property",
+          valueType: "xs:string",
+          value: "이미지",
+        },
+      ],
+    },
+  ],
+  conceptDescriptions: [],
+}
+
 export const sampleInstances: SampleInstance[] = [
   {
     id: "surface-inspection",
@@ -144,5 +191,14 @@ export const sampleInstances: SampleInstance[] = [
     updatedAt: "2026-06-28",
     contains: "AI Dataset + AI ModelNameplate",
     env: predictiveMaintenance,
+  },
+  {
+    id: "legacy-vision-dataset",
+    name: "Legacy Vision Dataset AAS",
+    assetId: "urn:factory:asset:legacy-vision-dataset:003",
+    platform: "Legacy AAS Repository",
+    updatedAt: "2026-05-19",
+    contains: "AI Dataset만 포함",
+    env: datasetOnly,
   },
 ]
