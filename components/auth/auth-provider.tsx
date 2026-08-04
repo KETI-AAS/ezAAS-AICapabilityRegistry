@@ -3,14 +3,14 @@
 import { createContext, useContext, useMemo, useState } from "react"
 
 type AuthUser = {
-  /** The account id the user logged in with. */
-  id: string
+  /** The AI Capability author's account email. */
+  email: string
 }
 
 type AuthContextValue = {
   user: AuthUser | null
-  /** Mock sign-in: accepts any non-empty id/password pair. */
-  login: (id: string, password: string) => boolean
+  /** Mock sign-in: accepts any non-empty email/password pair. */
+  login: (email: string, password: string) => boolean
   logout: () => void
 }
 
@@ -22,9 +22,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      login: (id, password) => {
-        if (!id.trim() || !password.trim()) return false
-        setUser({ id: id.trim() })
+      login: (email, password) => {
+        if (!email.trim() || !password.trim()) return false
+        setUser({ email: email.trim() })
         return true
       },
       logout: () => setUser(null),

@@ -20,17 +20,17 @@ import { Input } from "@/components/ui/input"
 
 export function SidebarAuth() {
   const { user, login, logout } = useAuth()
-  const [id, setId] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
   function handleLogin() {
-    const ok = login(id, password)
+    const ok = login(email, password)
     if (ok) {
-      toast.success(`${id.trim()}님 환영합니다`)
-      setId("")
+      toast.success(`${email.trim()}님 환영합니다`)
+      setEmail("")
       setPassword("")
     } else {
-      toast.error("아이디와 비밀번호를 입력해 주세요")
+      toast.error("이메일과 비밀번호를 입력해 주세요")
     }
   }
 
@@ -58,17 +58,17 @@ export function SidebarAuth() {
         >
           <Avatar size="sm">
             <AvatarFallback className="bg-primary/15 text-primary">
-              {user.id.charAt(0).toUpperCase()}
+              {user.email.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <span className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-medium">{user.id}</span>
+            <span className="truncate text-sm font-medium">{user.email}</span>
             <span className="text-xs text-muted-foreground">로그인됨</span>
           </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="w-(--anchor-width)">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>{user.id}</DropdownMenuLabel>
+            <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -93,11 +93,12 @@ export function SidebarAuth() {
         로그인
       </div>
       <Input
-        aria-label="아이디"
-        placeholder="아이디"
-        autoComplete="username"
-        value={id}
-        onChange={(e) => setId(e.target.value)}
+        aria-label="이메일"
+        type="email"
+        placeholder="이메일"
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
         onKeyDown={handleKeyDown}
       />
       <Input

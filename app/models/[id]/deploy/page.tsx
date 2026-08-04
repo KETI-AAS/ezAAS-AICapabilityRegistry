@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { ModelDeployWorkbench } from "@/components/model/model-deploy-workbench"
-import { getModel, models } from "@/lib/registry-data"
+import { getDataset, getModel, models } from "@/lib/registry-data"
 
 export function generateStaticParams() {
   return models.map((model) => ({ id: model.id }))
@@ -33,6 +33,8 @@ export default async function ModelDeployPage({
   const model = getModel(id)
 
   if (!model) notFound()
+  const dataset = getDataset(model.datasetId)
+  if (!dataset) notFound()
 
-  return <ModelDeployWorkbench model={model} />
+  return <ModelDeployWorkbench model={model} dataset={dataset} />
 }

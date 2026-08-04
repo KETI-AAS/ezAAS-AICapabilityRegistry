@@ -211,7 +211,7 @@ export function extractDatasetMeta(sm: Submodel): DatasetMeta {
   const props = new Map<string, string>()
   collectProps(sm.submodelElements, props)
   return {
-    title: pick(props, ALIASES.title) ?? sm.idShort,
+    title: sm.idShort,
     author: pick(props, ALIASES.author),
     version: pick(props, ALIASES.version),
     summary: pick(props, ALIASES.summary) ?? firstText(sm.description),
@@ -226,7 +226,7 @@ export function extractModelMeta(sm: Submodel): ModelMeta {
   const props = new Map<string, string>()
   collectProps(sm.submodelElements, props)
   return {
-    title: pick(props, ALIASES.title) ?? sm.idShort,
+    title: sm.idShort,
     author: pick(props, ALIASES.author),
     version: pick(props, ALIASES.version),
     summary: pick(props, ALIASES.summary) ?? firstText(sm.description),
