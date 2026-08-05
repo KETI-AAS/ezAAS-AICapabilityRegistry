@@ -2,185 +2,46 @@
 
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   Check,
   CircleCheck,
-  CircleDashed,
   Clock3,
-  Copy,
   Database,
-  Download,
-  FileText,
-  Info,
-  Link2,
+  FileImage,
   LoaderCircle,
-  Minus,
   Play,
   Power,
   RotateCcw,
   Server,
-  SlidersHorizontal,
-  Sparkles,
-  Trash2,
+  Target,
   UploadCloud,
-  X,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  getTaskThumbnail,
+  type Dataset,
+  type DatasetColumn,
+  type Model,
+} from "@/lib/registry-data"
 import { cn } from "@/lib/utils"
-import { getTaskThumbnail, type Model } from "@/lib/registry-data"
 
 type InstanceStatus = "provisioning" | "running" | "expired"
-type InputType = "example" | "upload" | null
-type MappingAction = "include" | "exclude" | "hold"
-type MappingStatus = "auto" | "review" | "excluded"
 type ExecutionStatus = "idle" | "running" | "complete"
-
-type UploadedFileInfo = {
-  name: string
-  sizeLabel: string
-  columns: string[]
-  columnCount: number
-  rowCount: number
-  previewRows: string[][]
-  uploadedAt: string
-}
 
 const SESSION_SECONDS = 30 * 60
 
-const STEPS = [
-  "입력 선택",
-  "데이터 업로드",
-  "Semantic Mapping",
-  "테스트 실행",
-  "결과 확인",
-] as const
-
-type MappingRow = {
-  semanticId: string
-  meaning: string
-  column: string
-  type: string
-  confidence: number
-  status: MappingStatus
-}
-
-const MAPPING_ROWS: MappingRow[] = [
-  {
-    semanticId: "IDTA:Property:temperature",
-    meaning: "온도 (°C)",
-    column: "TEMP_01",
-    type: "float",
-    confidence: 0.96,
-    status: "auto",
-  },
-  {
-    semanticId: "IDTA:Property:vibration.velocity",
-    meaning: "진동 속도 (mm/s)",
-    column: "VIB_VEL",
-    type: "float",
-    confidence: 0.94,
-    status: "auto",
-  },
-  {
-    semanticId: "IDTA:Property:spindle.rpm",
-    meaning: "스핀들 회전수 (RPM)",
-    column: "RPM_ACT",
-    type: "int",
-    confidence: 0.91,
-    status: "auto",
-  },
-  {
-    semanticId: "IDTA:Property:motor.current",
-    meaning: "모터 전류 (A)",
-    column: "MOTOR_A",
-    type: "float",
-    confidence: 0.62,
-    status: "review",
-  },
-  {
-    semanticId: "IDTA:Property:result.code",
-    meaning: "결과 코드",
-    column: "RESULT_CODE",
-    type: "string",
-    confidence: 0.98,
-    status: "auto",
-  },
-  {
-    semanticId: "IDTA:Property:air.pressure",
-    meaning: "에어 압력 (bar)",
-    column: "AIR_PRESS",
-    type: "float",
-    confidence: 0.58,
-    status: "review",
-  },
-  {
-    semanticId: "IDTA:Property:timestamp",
-    meaning: "측정 시간",
-    column: "TIMESTAMP",
-    type: "datetime",
-    confidence: 1.0,
-    status: "auto",
-  },
-]
-
-const PREVIEW_COLUMNS = [
-  "TIMESTAMP",
-  "MACHINE_ID",
-  "TEMP_01",
-  "VIB_VEL",
-  "RPM_ACT",
-  "MOTOR_A",
-  "RESULT_CODE",
-]
-
-const PREVIEW_ROWS: string[][] = [
-  ["2026-06-30 11:04:22", "CNC-PANGYO-014", "62.4", "3.12", "1492", "8.4", "NORMAL"],
-  ["2026-06-30 11:04:23", "CNC-PANGYO-014", "62.8", "3.18", "1495", "8.6", "NORMAL"],
-  ["2026-06-30 11:04:24", "CNC-PANGYO-014", "63.1", "7.84", "1521", "12.7", "WARNING"],
-  ["2026-06-30 11:04:25", "CNC-PANGYO-007", "59.7", "2.94", "1480", "7.9", "NORMAL"],
-  ["2026-06-30 11:04:26", "CNC-PANGYO-007", "60.2", "3.02", "1483", "8.1", "NORMAL"],
-]
-
-const PROCESS_STEPS = [
-  { icon: Database, label: "AAS 스키마 로드" },
-  { icon: Link2, label: "의미 기반 매칭" },
-  { icon: SlidersHorizontal, label: "전처리 생성" },
-  { icon: CircleCheck, label: "검증 및 검토" },
-]
-
-const PREPROCESSING_STEPS = [
-  "데이터 타입 변환",
-  "결측값 처리",
-  "단위 정규화",
-  "컬럼 순서 정렬",
-  "Tensor 변환",
-]
-
-const EXECUTION_LOG = [
-  "데이터 로드 완료",
-  "Semantic Mapping 적용 완료",
-  "자동 전처리 완료",
-  "모델 입력 검증 완료",
-  "모델 추론 중",
-  "결과 생성 중",
-  "완료",
-]
+const STEPS = ["입력값 작성", "추론 실행", "결과 확인"] as const
 
 function formatRemainingTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
@@ -188,36 +49,17 @@ function formatRemainingTime(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
 }
 
-function confidenceColor(value: number): string {
-  if (value >= 0.8) return "bg-emerald-500"
-  if (value >= 0.5) return "bg-amber-500"
-  return "bg-red-500"
+function inputType(column: DatasetColumn): React.HTMLInputTypeAttribute {
+  if (column.type === "number") return "number"
+  if (column.type === "datetime") return "datetime-local"
+  return "text"
 }
 
-function formatBytes(bytes: number): string {
+function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
-
-function formatUploadedAt(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function parseCsv(text: string): { columns: string[]; rows: string[][] } {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0)
-  if (lines.length === 0) return { columns: [], rows: [] }
-  const splitLine = (line: string) => line.split(",").map((cell) => cell.trim())
-  return {
-    columns: splitLine(lines[0]),
-    rows: lines.slice(1).map(splitLine),
-  }
-}
-
-/* ---------- Step indicator ---------- */
 
 function StepIndicator({ currentStep }: { currentStep: number }) {
   return (
@@ -228,16 +70,15 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
             const stepNumber = index + 1
             const isComplete = stepNumber < currentStep
             const isCurrent = stepNumber === currentStep
+
             return (
               <li key={label} className="flex min-w-0 items-center gap-1">
                 <div className="flex shrink-0 items-center gap-2">
                   <span
                     className={cn(
                       "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                      isComplete && "bg-primary text-primary-foreground",
-                      isCurrent && "bg-primary text-primary-foreground",
-                      !isComplete &&
-                        !isCurrent &&
+                      (isComplete || isCurrent) && "bg-primary text-primary-foreground",
+                      !isComplete && !isCurrent &&
                         "border border-border bg-muted text-muted-foreground"
                     )}
                   >
@@ -246,18 +87,14 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
                   <span
                     className={cn(
                       "whitespace-nowrap text-sm",
-                      isCurrent
-                        ? "font-medium text-foreground"
-                        : isComplete
-                          ? "text-foreground"
-                          : "text-muted-foreground"
+                      isCurrent ? "font-medium text-foreground" : "text-muted-foreground"
                     )}
                   >
                     {label}
                   </span>
                 </div>
                 {index < STEPS.length - 1 && (
-                  <Separator className="mx-2 hidden w-8 shrink-0 sm:block md:w-12" />
+                  <Separator className="mx-2 hidden w-10 shrink-0 sm:block md:w-16" />
                 )}
               </li>
             )
@@ -268,124 +105,28 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   )
 }
 
-/* ---------- Status badge ---------- */
-
-function StatusBadge({ status }: { status: MappingStatus }) {
-  if (status === "auto") {
-    return (
-      <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-        자동 매핑
-      </Badge>
-    )
-  }
-  if (status === "review") {
-    return (
-      <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-500">
-        검토 필요
-      </Badge>
-    )
-  }
-  return <Badge variant="secondary">제외됨</Badge>
-}
-
-/* ---------- Mapping action buttons ---------- */
-
-function MappingActions({
-  value,
-  onChange,
+export function ModelDeployWorkbench({
+  model,
+  dataset,
 }: {
-  value: MappingAction
-  onChange: (next: MappingAction) => void
+  model: Model
+  dataset: Dataset
 }) {
-  const base =
-    "flex size-8 items-center justify-center rounded-md border transition-colors"
-  return (
-    <div className="flex items-center gap-1">
-      <Tooltip>
-        <TooltipTrigger
-          type="button"
-          onClick={() => onChange("include")}
-          className={cn(
-            base,
-            value === "include"
-              ? "border-emerald-500 bg-emerald-500 text-white"
-              : "border-border text-muted-foreground hover:bg-muted"
-          )}
-          aria-label="모델 입력에 포함"
-        >
-          <Check className="size-4" />
-        </TooltipTrigger>
-        <TooltipContent>포함</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          type="button"
-          onClick={() => onChange("hold")}
-          className={cn(
-            base,
-            value === "hold"
-              ? "border-amber-500 bg-amber-500 text-white"
-              : "border-border text-muted-foreground hover:bg-muted"
-          )}
-          aria-label="검토 후 결정 (보류)"
-        >
-          <Minus className="size-4" />
-        </TooltipTrigger>
-        <TooltipContent>보류</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          type="button"
-          onClick={() => onChange("exclude")}
-          className={cn(
-            base,
-            value === "exclude"
-              ? "border-red-500 bg-red-500 text-white"
-              : "border-border text-muted-foreground hover:bg-muted"
-          )}
-          aria-label="모델 입력에서 제외"
-        >
-          <X className="size-4" />
-        </TooltipTrigger>
-        <TooltipContent>제외</TooltipContent>
-      </Tooltip>
-    </div>
+  const emptyValues = useMemo(
+    () => Object.fromEntries(dataset.columns.map((column) => [column.name, ""])),
+    [dataset.columns]
   )
-}
-
-export function ModelDeployWorkbench({ model }: { model: Model }) {
-  const endpoint = `https://runtime.aas.ai/${model.id}/predict`
 
   const [instanceStatus, setInstanceStatus] =
     useState<InstanceStatus>("provisioning")
   const [remainingSeconds, setRemainingSeconds] = useState(SESSION_SECONDS)
-
-  const [currentStep, setCurrentStep] = useState(1)
-  const [selectedInputType, setSelectedInputType] = useState<InputType>(null)
-  const [fileInfo, setFileInfo] = useState<UploadedFileInfo | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const [mappingActions, setMappingActions] = useState<
-    Record<string, MappingAction>
-  >(() =>
-    Object.fromEntries(
-      MAPPING_ROWS.map((row) => [
-        row.semanticId,
-        row.status === "review" ? "hold" : "include",
-      ])
-    )
-  )
-
+  const [values, setValues] = useState<Record<string, string>>(emptyValues)
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({})
   const [executionStatus, setExecutionStatus] =
     useState<ExecutionStatus>("idle")
-  const [logIndex, setLogIndex] = useState(-1)
-  const logTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    const readyTimer = window.setTimeout(() => {
-      setInstanceStatus("running")
-    }, 1200)
+    const readyTimer = window.setTimeout(() => setInstanceStatus("running"), 1200)
     return () => window.clearTimeout(readyTimer)
   }, [])
 
@@ -405,121 +146,56 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
   }, [instanceStatus])
 
   useEffect(() => {
-    return () => {
-      if (logTimer.current) window.clearInterval(logTimer.current)
-    }
-  }, [])
+    if (executionStatus !== "running") return
+    const inferenceTimer = window.setTimeout(() => {
+      setExecutionStatus("complete")
+      toast.success("추론이 완료되었습니다")
+    }, 1400)
+    return () => window.clearTimeout(inferenceTimer)
+  }, [executionStatus])
 
   const isRunning = instanceStatus === "running"
   const isExpired = instanceStatus === "expired"
+  const currentStep = executionStatus === "complete" ? 3 : executionStatus === "running" ? 2 : 1
+  const completedCount = dataset.columns.filter(
+    (column) => values[column.name]?.trim().length > 0
+  ).length
+  const completionPercent = dataset.columns.length
+    ? (completedCount / dataset.columns.length) * 100
+    : 0
+  const isClassPrediction = dataset.task !== "OCR"
+  const predictionItems = isClassPrediction
+    ? dataset.distribution.map((item) => item.label)
+    : model.outputItems
+  const canRun =
+    isRunning &&
+    dataset.columns.every(
+      (column) => !column.required || values[column.name]?.trim().length > 0
+    )
 
-  const terminateInstance = () => {
-    setInstanceStatus("expired")
-    setRemainingSeconds(0)
-    toast.info("일회용 인스턴스가 종료되었습니다")
+  const runInference = () => {
+    if (!canRun) return
+    setExecutionStatus("running")
   }
 
-  const copyEndpoint = async () => {
-    await navigator.clipboard.writeText(endpoint)
-    toast.success("Endpoint URL을 복사했습니다")
-  }
-
-  const uploaded = fileInfo !== null
-
-  const openFilePicker = () => {
-    fileInputRef.current?.click()
-  }
-
-  const processFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      toast.error("CSV 파일만 업로드할 수 있습니다")
+  const selectImageFile = (columnName: string, file?: File) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      toast.error("이미지 파일만 선택할 수 있습니다")
       return
     }
-    try {
-      const text = await file.text()
-      const { columns, rows } = parseCsv(text)
-      if (columns.length === 0) {
-        toast.error("파일에서 컬럼을 읽지 못했습니다")
-        return
-      }
-      setFileInfo({
-        name: file.name,
-        sizeLabel: formatBytes(file.size),
-        columns,
-        columnCount: columns.length,
-        rowCount: rows.length,
-        previewRows: rows.slice(0, 5),
-        uploadedAt: formatUploadedAt(new Date()),
-      })
-      setSelectedInputType("upload")
-      toast.success("CSV 파일 업로드가 완료되었습니다")
-    } catch {
-      toast.error("파일을 읽는 중 오류가 발생했습니다")
-    }
-  }
-
-  const handleFileInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0]
-    if (file) void processFile(file)
-    event.target.value = ""
-  }
-
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setIsDragging(false)
-    const file = event.dataTransfer.files?.[0]
-    if (file) void processFile(file)
-  }
-
-  const canProceedFromUpload =
-    selectedInputType === "example" ||
-    (selectedInputType === "upload" && uploaded)
-
-  const hasHold = Object.values(mappingActions).some((a) => a === "hold")
-  const includedColumns = MAPPING_ROWS.filter(
-    (row) => mappingActions[row.semanticId] === "include"
-  )
-
-  const runTest = () => {
-    setExecutionStatus("running")
-    setLogIndex(0)
-    if (logTimer.current) window.clearInterval(logTimer.current)
-    logTimer.current = setInterval(() => {
-      setLogIndex((current) => {
-        if (current >= EXECUTION_LOG.length - 1) {
-          if (logTimer.current) window.clearInterval(logTimer.current)
-          setExecutionStatus("complete")
-          setCurrentStep(5)
-          return current
-        }
-        return current + 1
-      })
-    }, 500)
+    setSelectedFiles((current) => ({ ...current, [columnName]: file }))
+    setValues((current) => ({ ...current, [columnName]: file.name }))
   }
 
   const restart = () => {
-    if (logTimer.current) window.clearInterval(logTimer.current)
-    setCurrentStep(1)
-    setSelectedInputType(null)
-    setFileInfo(null)
+    setValues(emptyValues)
+    setSelectedFiles({})
     setExecutionStatus("idle")
-    setLogIndex(-1)
-    setMappingActions(
-      Object.fromEntries(
-        MAPPING_ROWS.map((row) => [
-          row.semanticId,
-          row.status === "review" ? "hold" : "include",
-        ])
-      )
-    )
   }
 
   return (
-    <TooltipProvider>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 md:px-8 md:py-10">
-        {/* Header */}
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:px-8 md:py-10">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
             <div className="flex min-w-0 items-start gap-4">
@@ -535,7 +211,7 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
               </div>
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">Temporary Deploy</Badge>
+                  <Badge variant="outline">Inference Test</Badge>
                   <Badge variant="secondary" className="font-mono">
                     {model.version}
                   </Badge>
@@ -544,7 +220,7 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
                   {model.name}
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  모델을 설치하지 않고 브라우저에서 바로 테스트하는 일회용 추론 환경입니다.
+                  연결된 데이터셋의 컬럼에 값을 입력해 모델의 추론 결과를 확인합니다.
                 </p>
               </div>
             </div>
@@ -559,7 +235,11 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
               </Button>
               <Button
                 variant="destructive"
-                onClick={terminateInstance}
+                onClick={() => {
+                  setInstanceStatus("expired")
+                  setRemainingSeconds(0)
+                  toast.info("추론 인스턴스가 종료되었습니다")
+                }}
                 disabled={isExpired}
               >
                 <Power />
@@ -596,7 +276,7 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
 
               <Separator orientation="vertical" className="hidden h-9 lg:block" />
 
-              <div className="flex items-center gap-3">
+              <div className="ml-auto flex items-center gap-3">
                 <Clock3 className="size-4 text-muted-foreground" />
                 <div>
                   <p className="font-mono text-lg font-semibold tabular-nums">
@@ -606,22 +286,6 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
                 </div>
               </div>
 
-              <Separator orientation="vertical" className="hidden h-9 lg:block" />
-
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {endpoint}
-                </span>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Endpoint URL 복사"
-                  onClick={copyEndpoint}
-                  disabled={!isRunning}
-                >
-                  <Copy />
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -629,205 +293,207 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
         {isExpired ? (
           <Alert>
             <Power />
-            <AlertTitle>일회용 배포가 종료되었습니다</AlertTitle>
+            <AlertTitle>추론 환경이 종료되었습니다</AlertTitle>
             <AlertDescription>
-              모델 상세 화면에서 Deploy를 다시 눌러 새로운 세션을 시작할 수 있습니다.
+              모델 또는 Asset Pair 상세 화면에서 Deploy를 다시 눌러 새 세션을 시작할 수 있습니다.
             </AlertDescription>
           </Alert>
         ) : (
           <>
             <StepIndicator currentStep={currentStep} />
 
-            {/* View 1: Input selection + Data upload */}
-            {currentStep <= 2 && (
-              <Card>
-                <CardContent className="flex flex-col gap-8 py-2">
-                  {/* Step 1 */}
-                  <section className="flex flex-col gap-4">
+            {executionStatus !== "complete" ? (
+              <Card className="overflow-hidden">
+                <div className="border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 py-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold">1. 입력 선택</h2>
+                      <div className="mb-1.5 flex items-center gap-2 text-sm font-medium text-primary">
+                        <Database className="size-4" />
+                        {dataset.name}
+                      </div>
+                      <h2 className="text-xl font-semibold">
+                        {dataset.dataType === "시계열"
+                          ? "센서 측정값을 입력해주세요"
+                          : "모델 입력값을 입력해주세요"}
+                      </h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        테스트에 사용할 데이터를 선택해주세요.
+                        모델이 판단에 사용하는 입력값만 표시됩니다. 모든 항목을 입력하면 추론할 수 있습니다.
                       </p>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <InputSourceCard
-                        title="예제 데이터 사용"
-                        description="등록된 연계 데이터셋의 샘플 데이터로 테스트를 진행합니다."
-                        selected={selectedInputType === "example"}
-                        onSelect={() => {
-                          setSelectedInputType("example")
-                          setFileInfo(null)
-                        }}
-                      />
-                      <InputSourceCard
-                        title="내 데이터 업로드"
-                        description="CSV 파일을 직접 업로드하여 모델 적용 가능성을 검증합니다."
-                        selected={selectedInputType === "upload"}
-                        onSelect={() => setSelectedInputType("upload")}
-                      />
+                    <div className="min-w-36 rounded-xl border border-primary/15 bg-background/80 px-4 py-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-4 text-sm">
+                        <span className="text-muted-foreground">입력 완료</span>
+                        <strong className="font-mono text-primary">
+                          {completedCount} / {dataset.columns.length}
+                        </strong>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full bg-primary transition-[width] duration-300"
+                          style={{ width: `${completionPercent}%` }}
+                        />
+                      </div>
                     </div>
-                  </section>
+                  </div>
+                </div>
 
-                  {/* Example data path */}
-                  {selectedInputType === "example" && (
-                    <>
-                      <Separator />
-                      <section className="flex flex-col gap-4">
-                        <div>
-                          <h2 className="text-lg font-semibold">
-                            2. 예제 데이터 확인
-                          </h2>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            등록된 연계 데이터셋의 샘플이 이미 매핑되어 있어 별도의 업로드와 Semantic Mapping 없이 바로 테스트할 수 있습니다.
-                          </p>
-                        </div>
-                        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Database className="size-5" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium">
-                              예제 데이터셋 · machine_sample.csv
-                            </p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              7 컬럼 · 5,000 행 · Semantic Mapping 완료
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-medium">데이터 미리보기</h3>
-                          <Badge variant="secondary">최대 5개 행</Badge>
-                        </div>
-                        <DataPreviewTable
-                          columns={PREVIEW_COLUMNS}
-                          rows={PREVIEW_ROWS}
-                        />
-                      </section>
-                    </>
-                  )}
+                <CardContent className="flex flex-col gap-6 py-6">
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="flex flex-col gap-3">
+                      {dataset.columns.map((column, index) => {
+                        const inputId = `inference-${column.name}`
+                        const hasValue = values[column.name]?.trim().length > 0
 
-                  {/* Upload data path */}
-                  {selectedInputType === "upload" && (
-                    <>
-                      <Separator />
-                      <section className="flex flex-col gap-4">
-                        <div>
-                          <h2 className="text-lg font-semibold">2. 데이터 업로드</h2>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            내 컴퓨터에 있는 CSV 파일을 드래그하거나 클릭하여 업로드해주세요.
-                          </p>
-                        </div>
-
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept=".csv,text/csv"
-                          className="sr-only"
-                          onChange={handleFileInputChange}
-                        />
-
-                        {!uploaded ? (
+                        return (
                           <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={openFilePicker}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault()
-                                openFilePicker()
-                              }
-                            }}
-                            onDragOver={(event) => {
-                              event.preventDefault()
-                              setIsDragging(true)
-                            }}
-                            onDragLeave={() => setIsDragging(false)}
-                            onDrop={handleDrop}
+                            key={column.name}
                             className={cn(
-                              "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center transition-colors",
-                              isDragging
-                                ? "border-primary bg-primary/5"
-                                : "border-border bg-muted/30 hover:border-primary/50 hover:bg-primary/5"
+                              "grid gap-4 rounded-xl border p-4 transition-colors sm:grid-cols-[minmax(0,1fr)_240px] sm:items-center",
+                              hasValue
+                                ? "border-primary/30 bg-primary/[0.025]"
+                                : "border-border bg-card"
                             )}
                           >
-                            <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                              <UploadCloud className="size-6" />
-                            </span>
-                            <div>
-                              <p className="font-medium">
-                                파일을 드래그하거나 클릭하여 업로드
-                              </p>
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                CSV 파일만 업로드 가능합니다.
-                              </p>
+                            <div className="flex min-w-0 items-start gap-3">
+                              <span
+                                className={cn(
+                                  "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                                  hasValue
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground"
+                                )}
+                              >
+                                {hasValue ? <Check className="size-4" /> : index + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <label htmlFor={inputId} className="flex flex-wrap items-center gap-2 font-semibold">
+                                  {column.label}
+                                  {column.required ? <span className="text-destructive">*</span> : null}
+                                </label>
+                                <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                                  {column.name}
+                                </p>
+                                <p id={`${inputId}-description`} className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                                  {column.description}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          fileInfo && (
-                            <div className="flex flex-col gap-4">
-                              <div className="flex items-center gap-3 rounded-xl border border-border p-4">
-                                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                  <FileText className="size-5" />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <p className="truncate text-sm font-medium">
-                                      {fileInfo.name}
-                                    </p>
-                                    <Check className="size-4 shrink-0 text-emerald-500" />
-                                  </div>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    CSV 파일 · {fileInfo.columnCount} 컬럼 ·{" "}
-                                    {fileInfo.rowCount.toLocaleString()} 행 ·{" "}
-                                    {fileInfo.sizeLabel}
-                                  </p>
-                                </div>
-                                <Button
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label="파일 삭제"
-                                  onClick={() => setFileInfo(null)}
+
+                            {column.type === "image" ? (
+                              <div>
+                                <input
+                                  id={inputId}
+                                  type="file"
+                                  accept="image/*"
+                                  className="sr-only"
+                                  disabled={executionStatus === "running"}
+                                  onChange={(event) => {
+                                    selectImageFile(column.name, event.target.files?.[0])
+                                    event.target.value = ""
+                                  }}
+                                  aria-describedby={`${inputId}-description`}
+                                />
+                                <label
+                                  htmlFor={inputId}
+                                  className={cn(
+                                    "flex min-h-20 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition-colors",
+                                    selectedFiles[column.name]
+                                      ? "border-primary/40 bg-primary/5"
+                                      : "border-border bg-background hover:border-primary/50 hover:bg-primary/5",
+                                    executionStatus === "running" && "pointer-events-none opacity-60"
+                                  )}
                                 >
-                                  <Trash2 />
-                                </Button>
+                                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                    {selectedFiles[column.name] ? (
+                                      <FileImage className="size-5" />
+                                    ) : (
+                                      <UploadCloud className="size-5" />
+                                    )}
+                                  </span>
+                                  <span className="min-w-0">
+                                    {selectedFiles[column.name] ? (
+                                      <>
+                                        <span className="block truncate text-sm font-semibold">
+                                          {selectedFiles[column.name].name}
+                                        </span>
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                                          {formatFileSize(selectedFiles[column.name].size)} · 클릭하여 변경
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="block text-sm font-semibold">이미지 파일 선택</span>
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                                          JPG, PNG, WEBP 등
+                                        </span>
+                                      </>
+                                    )}
+                                  </span>
+                                </label>
                               </div>
+                            ) : (
+                              <div className="relative">
+                                <Input
+                                  id={inputId}
+                                  type={inputType(column)}
+                                  step={column.type === "number" ? "any" : undefined}
+                                  value={values[column.name] ?? ""}
+                                  onChange={(event) =>
+                                    setValues((current) => ({
+                                      ...current,
+                                      [column.name]: event.target.value,
+                                    }))
+                                  }
+                                  disabled={executionStatus === "running"}
+                                  aria-describedby={`${inputId}-description`}
+                                  className={cn("h-12 bg-background text-base", column.unit && "pr-16")}
+                                />
+                                {column.unit ? (
+                                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 border-l border-border pl-3 font-mono text-xs font-medium text-muted-foreground">
+                                    {column.unit}
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
 
-                              <div className="grid grid-cols-2 divide-border rounded-xl border border-border text-center sm:grid-cols-5 sm:divide-x">
-                                <FileStat label="확장자" value="CSV" />
-                                <FileStat
-                                  label="컬럼 수"
-                                  value={String(fileInfo.columnCount)}
-                                />
-                                <FileStat
-                                  label="총 행수"
-                                  value={fileInfo.rowCount.toLocaleString()}
-                                />
-                                <FileStat
-                                  label="파일 크기"
-                                  value={fileInfo.sizeLabel}
-                                />
-                                <FileStat
-                                  label="업로드 일시"
-                                  value={fileInfo.uploadedAt}
-                                />
-                              </div>
+                    <aside className="h-fit rounded-xl border border-border bg-muted/25 p-5 lg:sticky lg:top-6">
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Target className="size-4" />
+                        </span>
+                        <div>
+                          <h3 className="text-sm font-semibold">모델이 반환하는 결과</h3>
+                          <p className="text-xs text-muted-foreground">
+                            {isClassPrediction ? `정답 라벨 · ${dataset.classCount}개` : "출력 항목"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-col gap-2">
+                        {predictionItems.map((item) => (
+                          <div key={item} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-sm">
+                            <span className="size-2 rounded-full bg-primary" />
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                        위 항목은 입력값이 아니라 모델이 입력 데이터를 분석해 반환하는 결과입니다.
+                      </p>
+                    </aside>
+                  </div>
 
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-sm font-medium">
-                                  데이터 미리보기
-                                </h3>
-                                <Badge variant="secondary">최대 5개 행</Badge>
-                              </div>
-                              <DataPreviewTable
-                                columns={fileInfo.columns}
-                                rows={fileInfo.previewRows}
-                              />
-                            </div>
-                          )
-                        )}
-                      </section>
-                    </>
+                  {executionStatus === "running" && (
+                    <Alert>
+                      <LoaderCircle className="animate-spin" />
+                      <AlertTitle>추론을 실행하고 있습니다</AlertTitle>
+                      <AlertDescription>
+                        입력값을 전처리하고 모델 결과를 생성하는 중입니다.
+                      </AlertDescription>
+                    </Alert>
                   )}
 
                   <Separator />
@@ -841,722 +507,577 @@ export function ModelDeployWorkbench({ model }: { model: Model }) {
                       <ArrowLeft />
                       이전 단계
                     </Button>
-                    {selectedInputType === "example" ? (
-                      <Button onClick={() => setCurrentStep(4)}>
-                        다음 단계: 테스트 실행
-                        <ArrowRight />
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() => setCurrentStep(3)}
-                        disabled={!canProceedFromUpload}
-                      >
-                        다음 단계: Semantic Mapping 설정
-                        <ArrowRight />
-                      </Button>
-                    )}
+                    <Button
+                      size="lg"
+                      onClick={runInference}
+                      disabled={!canRun || executionStatus === "running"}
+                    >
+                      {executionStatus === "running" ? (
+                        <LoaderCircle className="animate-spin" />
+                      ) : (
+                        <Play />
+                      )}
+                      입력값으로 추론하기
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
-            )}
-
-            {/* View 2: Semantic Mapping */}
-            {currentStep === 3 && (
-              <SemanticMappingView
-                mappingActions={mappingActions}
-                onActionChange={(id, next) =>
-                  setMappingActions((prev) => ({ ...prev, [id]: next }))
-                }
-                hasHold={hasHold}
-                onBack={() => setCurrentStep(2)}
-                onNext={() => setCurrentStep(4)}
+            ) : (
+              <InferenceResult
+                model={model}
+                dataset={dataset}
+                values={values}
+                onRestart={restart}
               />
-            )}
-
-            {/* View 3: Test execution */}
-            {currentStep === 4 && (
-              <TestExecutionView
-                includedCount={includedColumns.length}
-                includedColumns={includedColumns.map((c) => c.column)}
-                executionStatus={executionStatus}
-                logIndex={logIndex}
-                onBack={() =>
-                  setCurrentStep(selectedInputType === "example" ? 1 : 3)
-                }
-                onRun={runTest}
-              />
-            )}
-
-            {/* View 4: Result */}
-            {currentStep === 5 && (
-              <ResultView model={model} onRestart={restart} />
             )}
           </>
         )}
 
         <Alert>
           <Server />
-          <AlertTitle>일회용 배포 환경</AlertTitle>
+          <AlertTitle>일회용 추론 환경</AlertTitle>
           <AlertDescription>
-            세션이 종료되면 업로드한 입력과 추론 결과가 삭제됩니다. 운영 배포 용도로는 사용할 수 없습니다.
+            세션이 종료되면 입력값과 추론 결과가 삭제됩니다. 운영 배포 용도로는 사용할 수 없습니다.
           </AlertDescription>
         </Alert>
-      </div>
-    </TooltipProvider>
-  )
-}
-
-/* ---------- View 1 subcomponents ---------- */
-
-function InputSourceCard({
-  title,
-  description,
-  selected,
-  onSelect,
-}: {
-  title: string
-  description: string
-  selected: boolean
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "flex items-start gap-3 rounded-xl border p-4 text-left transition-colors",
-        selected
-          ? "border-primary bg-primary/5"
-          : "border-border hover:border-primary/40 hover:bg-muted/40"
-      )}
-    >
-      <span
-        className={cn(
-          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
-          selected ? "border-primary" : "border-muted-foreground/40"
-        )}
-      >
-        {selected && <span className="size-2.5 rounded-full bg-primary" />}
-      </span>
-      <div>
-        <p className="text-sm font-medium">{title}</p>
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
-      </div>
-    </button>
-  )
-}
-
-function FileStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="px-3 py-3">
-      <p className="truncate font-mono text-sm font-semibold tabular-nums">
-        {value}
-      </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
     </div>
   )
 }
 
-function DataPreviewTable({
-  columns,
-  rows,
+function InferenceResult({
+  model,
+  dataset,
+  values,
+  onRestart,
 }: {
-  columns: string[]
-  rows: string[][]
+  model: Model
+  dataset: Dataset
+  values: Record<string, string>
+  onRestart: () => void
 }) {
+  if (dataset.dataType === "이미지") {
+    return (
+      <ImageInferenceResult
+        model={model}
+        onRestart={onRestart}
+      />
+    )
+  }
+
+  if (dataset.id !== "sensor-logs") {
+    return (
+      <GenericInferenceResult
+        model={model}
+        dataset={dataset}
+        values={values}
+        onRestart={onRestart}
+      />
+    )
+  }
+
+  const prediction = buildPrediction(values)
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead>
-          <tr className="border-b border-border bg-muted/40 text-left">
-            {columns.map((col) => (
-              <th
-                key={col}
-                className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-muted-foreground"
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr
-              key={rowIndex}
-              className="border-b border-border last:border-0"
-            >
-              {row.map((cell, cellIndex) => (
-                <td
-                  key={cellIndex}
-                  className={cn(
-                    "whitespace-nowrap px-3 py-2.5 font-mono text-xs tabular-nums",
-                    cell === "WARNING"
-                      ? "font-medium text-amber-600 dark:text-amber-500"
-                      : "text-foreground"
-                  )}
-                >
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-/* ---------- View 2: Semantic Mapping ---------- */
-
-function SemanticMappingView({
-  mappingActions,
-  onActionChange,
-  hasHold,
-  onBack,
-  onNext,
-}: {
-  mappingActions: Record<string, MappingAction>
-  onActionChange: (id: string, next: MappingAction) => void
-  hasHold: boolean
-  onBack: () => void
-  onNext: () => void
-}) {
-  return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardContent className="flex flex-col gap-6 py-2">
-          {/* Title row */}
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                3
-              </span>
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Semantic Mapping (자동 전처리)
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  모델 입력 스키마의 Semantic ID와 업로드한 데이터 컬럼을 자동으로 매핑합니다.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-                자동 매핑 9
-              </Badge>
-              <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-500">
-                검토 필요 2
-              </Badge>
-              <Badge variant="secondary">제외됨 1</Badge>
-            </div>
-          </div>
-
-          {/* Process summary */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-border bg-muted/30 px-4 py-3">
-            {PROCESS_STEPS.map((step, index) => (
-              <div key={step.label} className="flex items-center gap-2">
-                <span className="relative flex size-8 items-center justify-center rounded-full bg-background text-muted-foreground ring-1 ring-border">
-                  <step.icon className="size-4" />
-                  <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <Check className="size-2.5" />
-                  </span>
-                </span>
-                <span className="text-sm font-medium">{step.label}</span>
-                {index < PROCESS_STEPS.length - 1 && (
-                  <Separator className="ml-2 hidden w-6 md:block" />
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid gap-6 2xl:grid-cols-[1fr_300px]">
-            {/* Mapping table */}
-            <div className="min-w-0 overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2.5 font-medium">
-                      모델 입력 스키마 (Semantic ID)
-                    </th>
-                    <th className="px-3 py-2.5 font-medium">의미</th>
-                    <th className="px-3 py-2.5 font-medium">선택된 컬럼</th>
-                    <th className="px-3 py-2.5 font-medium">타입</th>
-                    <th className="px-3 py-2.5 font-medium">신뢰도</th>
-                    <th className="px-3 py-2.5 font-medium">상태</th>
-                    <th className="px-3 py-2.5 text-right font-medium">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {MAPPING_ROWS.map((row) => (
-                    <tr
-                      key={row.semanticId}
-                      className="border-b border-border last:border-0"
-                    >
-                      <td className="px-3 py-3 font-mono text-xs">
-                        {row.semanticId}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">
-                        {row.meaning}
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs">
-                        {row.column}
-                      </td>
-                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                        {row.type}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex w-24 flex-col gap-1">
-                          <span className="font-mono text-xs tabular-nums">
-                            {row.confidence.toFixed(2)}
-                          </span>
-                          <span className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                            <span
-                              className={cn(
-                                "block h-full rounded-full",
-                                confidenceColor(row.confidence)
-                              )}
-                              style={{ width: `${row.confidence * 100}%` }}
-                            />
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <StatusBadge status={row.status} />
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex justify-end">
-                          <MappingActions
-                            value={mappingActions[row.semanticId]}
-                            onChange={(next) =>
-                              onActionChange(row.semanticId, next)
-                            }
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Guide panel */}
-            <MappingGuidePanel />
-          </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Check className="size-3.5 text-emerald-500" />
-              포함: 모델 입력으로 사용
-            </span>
-            <span className="flex items-center gap-1.5">
-              <X className="size-3.5 text-red-500" />
-              제외: 모델 입력에서 제외
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Minus className="size-3.5 text-amber-500" />
-              보류: 검토 후 결정
-            </span>
-          </div>
-
-          {/* Excluded original columns */}
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold">
-              모델 입력에서 제외된 원본 컬럼 (1)
-            </h3>
-            <div className="overflow-x-auto rounded-xl border border-border bg-muted/20">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th className="px-3 py-2.5 font-medium">컬럼명</th>
-                    <th className="px-3 py-2.5 font-medium">데이터 타입</th>
-                    <th className="px-3 py-2.5 font-medium">샘플 값</th>
-                    <th className="px-3 py-2.5 font-medium">제외 이유</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="px-3 py-3 font-mono text-xs">MACHINE_ID</td>
-                    <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                      string
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                      CNC-PANGYO-014
-                    </td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground">
-                      모델 입력 스키마에 정의되지 않은 식별자 컬럼
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <Separator />
-
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-            <Button variant="outline" onClick={onBack}>
-              <ArrowLeft />
-              취소하고 이전으로
-            </Button>
-            <Button onClick={onNext} disabled={hasHold}>
-              전처리 결과로 이동
-              <ArrowRight />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function MappingGuidePanel() {
-  return (
-    <aside className="flex flex-col gap-4 rounded-xl border border-border bg-muted/20 p-4">
-      <div className="flex items-center gap-2">
-        <Info className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">Semantic Mapping 안내</h3>
-      </div>
-      <p className="text-xs leading-5 text-muted-foreground">
-        모델 학습에 사용된 데이터셋의 AAS 서브모델에서 Semantic ID와 의미 정보를 읽고, 업로드한 데이터 컬럼의 이름, 단위, 데이터 타입 및 값 분포를 비교하여 자동으로 매핑합니다.
-      </p>
-      <div>
-        <p className="mb-2 text-xs font-medium">매핑 기준</p>
-        <ul className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-          {[
-            "Semantic ID 의미",
-            "컬럼명 유사도",
-            "단위 일치",
-            "데이터 타입",
-            "값 분포 및 통계",
-          ].map((item) => (
-            <li key={item} className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-primary" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <Separator />
-      <div>
-        <p className="mb-2 text-xs font-medium">신뢰도 기준</p>
-        <ul className="flex flex-col gap-1.5 text-xs">
-          <li className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            <span className="text-muted-foreground">
-              0.80–1.00 매우 높음, 자동 매핑 권장
-            </span>
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-amber-500" />
-            <span className="text-muted-foreground">
-              0.50–0.79 보통, 검토 권장
-            </span>
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-red-500" />
-            <span className="text-muted-foreground">
-              0.00–0.49 낮음, 검토 필요
-            </span>
-          </li>
-        </ul>
-      </div>
-    </aside>
-  )
-}
-
-/* ---------- View 3: Test execution ---------- */
-
-function TestExecutionView({
-  includedCount,
-  includedColumns,
-  executionStatus,
-  logIndex,
-  onBack,
-  onRun,
-}: {
-  includedCount: number
-  includedColumns: string[]
-  executionStatus: ExecutionStatus
-  logIndex: number
-  onBack: () => void
-  onRun: () => void
-}) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-6 py-2">
-        <div className="flex items-start gap-3">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-            4
-          </span>
+    <Card className="overflow-hidden">
+      <CardContent className="flex flex-col gap-6 py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">테스트 실행</h2>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              검토한 매핑과 자동 생성된 전처리를 적용하여 모델 테스트를 실행합니다.
+            <div className="mb-1.5 flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+              <Badge className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <CircleCheck className="size-3.5" />
+                추론 실행 완료
+              </Badge>
+            </div>
+            <h2 className="text-2xl font-semibold">설비 상태 판정 결과</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              입력한 센서값을 분석한 모델의 예측 결과입니다.
             </p>
           </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Preprocessing summary */}
-          <div className="flex flex-col gap-4 rounded-xl border border-border p-4">
-            <h3 className="text-sm font-semibold">전처리 요약</h3>
-            <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
-                선택된 입력 컬럼 ({includedColumns.length})
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {includedColumns.map((col) => (
-                  <Badge key={col} variant="outline" className="font-mono">
-                    {col}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
-                제외된 컬럼
-              </p>
-              <Badge variant="secondary" className="font-mono">
-                MACHINE_ID
-              </Badge>
-            </div>
-            <Separator />
-            <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
-                자동 생성된 전처리 단계
-              </p>
-              <ol className="flex flex-col gap-1.5">
-                {PREPROCESSING_STEPS.map((step, index) => (
-                  <li
-                    key={step}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <span className="flex size-5 items-center justify-center rounded-full bg-muted font-mono text-xs text-muted-foreground">
-                      {index + 1}
-                    </span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-
-          {/* Validation + run */}
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 rounded-xl border border-border p-4">
-              <ValidationStat label="필수 입력" value={`${includedCount}`} />
-              <ValidationStat label="포함된 입력" value={`${includedCount}`} />
-              <ValidationStat label="검토 필요" value="0" />
-              <div className="flex flex-col justify-center">
-                <Badge className="w-fit gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-                  <Check className="size-3" />
-                  Ready
-                </Badge>
-                <p className="mt-1 text-xs text-muted-foreground">검증 상태</p>
-              </div>
-            </div>
-
-            {executionStatus === "idle" ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  예상 소요 시간: 약 3초
-                </p>
-                <Button size="lg" onClick={onRun}>
-                  <Play />
-                  테스트 실행
-                </Button>
-              </div>
-            ) : (
-              <div className="flex-1 rounded-xl border border-border p-4">
-                <p className="mb-3 text-sm font-semibold">실행 로그</p>
-                <ol className="flex flex-col gap-2.5">
-                  {EXECUTION_LOG.map((log, index) => {
-                    const done = index < logIndex
-                    const active =
-                      index === logIndex && executionStatus === "running"
-                    return (
-                      <li
-                        key={log}
-                        className="flex items-center gap-2.5 text-sm"
-                      >
-                        {done ? (
-                          <CircleCheck className="size-4 text-emerald-500" />
-                        ) : active ? (
-                          <LoaderCircle className="size-4 animate-spin text-primary" />
-                        ) : (
-                          <CircleDashed className="size-4 text-muted-foreground/50" />
-                        )}
-                        <span
-                          className={cn(
-                            done
-                              ? "text-foreground"
-                              : active
-                                ? "font-medium text-foreground"
-                                : "text-muted-foreground"
-                          )}
-                        >
-                          {log}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ol>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <Separator />
-
-        <div className="flex justify-start">
-          <Button
-            variant="outline"
-            onClick={onBack}
-            disabled={executionStatus === "running"}
-          >
-            <ArrowLeft />
-            이전 단계
+          <Button onClick={onRestart}>
+            <RotateCcw />
+            다른 값으로 다시 실행
           </Button>
+        </div>
+
+        <section
+          className={cn(
+            "grid gap-5 rounded-2xl border p-6 md:grid-cols-[minmax(0,1fr)_180px] md:items-center",
+            prediction.isNormal
+              ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/25"
+              : "border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/25"
+          )}
+        >
+          <div className="flex items-start gap-4">
+            <span
+              className={cn(
+                "flex size-12 shrink-0 items-center justify-center rounded-full",
+                prediction.isNormal
+                  ? "bg-emerald-600 text-white"
+                  : "bg-amber-500 text-white"
+              )}
+            >
+              {prediction.isNormal ? (
+                <CircleCheck className="size-6" />
+              ) : (
+                <AlertTriangle className="size-6" />
+              )}
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                최종 판정
+              </p>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h3 className="text-3xl font-bold tracking-tight">{prediction.label}</h3>
+                <span className="text-lg font-semibold text-muted-foreground">
+                  {prediction.koreanLabel}
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {prediction.description}
+              </p>
+              <p className="mt-3 text-sm font-semibold">{prediction.recommendation}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-background/80 bg-background/80 p-4 text-center shadow-sm">
+            <p className="font-mono text-4xl font-bold tabular-nums">
+              {prediction.confidence}%
+            </p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">예측 신뢰도</p>
+          </div>
+        </section>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <ResultMetric label="이상 점수" value={prediction.anomalyScore.toFixed(2)} description="1에 가까울수록 이상 가능성이 높음" />
+          <ResultMetric label="예상 잔여 수명" value={prediction.remainingLife} description="현재 센서 상태 기준 추정" />
+          <ResultMetric label="추론 시간" value="42 ms" description="모델 처리에 걸린 시간" />
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+          <section className="rounded-xl border border-border p-5">
+            <h3 className="mb-3 text-sm font-semibold">입력한 센서값</h3>
+            <dl className="flex flex-col divide-y divide-border">
+              {dataset.columns.map((column) => (
+                <div key={column.name} className="flex items-center justify-between gap-4 py-3 text-sm">
+                  <dt>
+                    <p className="font-medium">{column.label}</p>
+                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{column.name}</p>
+                  </dt>
+                  <dd className="whitespace-nowrap font-mono text-base font-semibold">
+                    {values[column.name]}
+                    {column.unit ? <span className="ml-1.5 text-xs font-normal text-muted-foreground">{column.unit}</span> : null}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="rounded-xl border border-border p-5">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold">클래스별 예측 확률</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                모델이 네 가지 설비 상태일 가능성을 비교한 결과입니다.
+              </p>
+            </div>
+            <div className="flex flex-col gap-4">
+              {prediction.probabilities.map((item) => (
+                <div key={item.label}>
+                  <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                    <span className={cn("font-medium", item.label === prediction.label && "text-primary")}>{item.label}</span>
+                    <span className="font-mono font-semibold tabular-nums">{item.value}%</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className={cn(
+                        "block h-full rounded-full transition-[width] duration-500",
+                        item.label === prediction.label ? "bg-primary" : "bg-muted-foreground/30"
+                      )}
+                      style={{ width: `${item.value}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </CardContent>
     </Card>
   )
 }
 
-function ValidationStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="font-mono text-xl font-semibold tabular-nums">{value}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
-    </div>
-  )
-}
-
-/* ---------- View 4: Result ---------- */
-
-function ResultView({
+function ImageInferenceResult({
   model,
   onRestart,
 }: {
   model: Model
   onRestart: () => void
 }) {
+  const isOcr = model.task === "OCR"
+  const isClassification = model.task === "Classification"
+  const isObjectDetection = model.task === "Object Detection"
+  const resultHeading = isOcr
+    ? "문서에서 텍스트를 인식했습니다"
+    : model.task === "Segmentation"
+      ? "결함 영역을 분할했습니다"
+      : model.task === "Classification"
+        ? "이미지 분류를 완료했습니다"
+        : "이미지에서 객체를 검출했습니다"
+  const resultCaption = isOcr
+    ? "인식 영역과 문자 위치가 표시된 결과"
+    : model.resultType === "Segmentation"
+      ? "픽셀 단위 마스크가 적용된 결과"
+      : "모델 분석 결과가 표시된 이미지"
+
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-6 py-2">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-              5
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold">결과 확인</h2>
-                <Badge className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-                  <Check className="size-3" />
-                  완료
-                </Badge>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                실행 시각 2026-06-30 11:05:12 · 입력 1,284,930행
-              </p>
-            </div>
+    <Card className="overflow-hidden">
+      <CardContent className="flex flex-col gap-6 py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Badge className="mb-2 gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <CircleCheck className="size-3.5" />
+              추론 실행 완료
+            </Badge>
+            <h2 className="text-2xl font-semibold">{resultHeading}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{model.outputDescription}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => toast.success("JSON을 다운로드했습니다")}>
-              <Download />
-              JSON 다운로드
-            </Button>
-            <Button variant="outline" onClick={() => toast.success("결과를 다운로드했습니다")}>
-              <Download />
-              결과 다운로드
-            </Button>
-            <Button onClick={onRestart}>
-              <RotateCcw />
-              다시 실행
-            </Button>
-          </div>
+          <Button onClick={onRestart}>
+            <RotateCcw />
+            다른 이미지로 다시 실행
+          </Button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-          {/* Visual result */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <ResultImage
-              src={getTaskThumbnail(model.task)}
-              caption="원본 입력"
-            />
-            <ResultImage
+        {isOcr ? (
+          <div className="flex flex-col gap-5">
+            <ResultImagePanel
               src={model.resultImage || getTaskThumbnail(model.task)}
-              caption="추론 결과 (Bounding Box)"
-              badge="Output"
+              title="문자 위치 검출 결과"
+              caption={resultCaption}
+              badge="Bounding Box + OCR"
             />
-          </div>
 
-          {/* Summary */}
-          <aside className="flex flex-col gap-3 rounded-xl border border-border p-4">
-            <h3 className="text-sm font-semibold">결과 요약</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <ResultMetric label="평균 신뢰도" value="96.4%" />
-              <ResultMetric label="Latency" value="42 ms" />
-              <ResultMetric label="검출 객체" value="5" />
-              <ResultMetric label="Format" value="JSON" />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+              <section className="rounded-xl border border-border p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">인식된 텍스트</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">검출된 문자 영역에서 추출한 내용입니다.</p>
+                  </div>
+                  <Badge variant="secondary">12개 영역</Badge>
+                </div>
+                <div className="mt-4 rounded-lg bg-muted/40 p-4 font-mono text-sm leading-7">
+                  Capability Flow<br />
+                  AI Asset Pair<br />
+                  Dataset → Model → Inference
+                </div>
+              </section>
+              <section className="grid grid-cols-3 gap-3 rounded-xl border border-border p-4 lg:grid-cols-1">
+                <ImageResultMetric label="평균 신뢰도" value="98.1%" />
+                <ImageResultMetric label="감지 영역" value="12" />
+                <ImageResultMetric label="인식 문자" value="46" />
+              </section>
             </div>
-            <Separator />
-            <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
-                검출 클래스
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {["Scratch", "Dent", "Paint Defect"].map((label) => (
-                  <Badge key={label} variant="outline">
-                    {label}
-                  </Badge>
-                ))}
-              </div>
+          </div>
+        ) : isClassification ? (
+          <div className="flex flex-col gap-5">
+            <section className="rounded-2xl border border-primary/20 bg-primary/[0.025] p-8 text-center md:p-12">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">예측 클래스</p>
+              <h3 className="mt-3 text-4xl font-bold tracking-tight md:text-6xl">Scratch</h3>
+              <p className="mt-2 text-lg text-muted-foreground">스크래치 결함</p>
+              <Badge className="mt-5 text-base">신뢰도 97.2%</Badge>
+            </section>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ImageResultMetric label="예측 신뢰도" value="97.2%" />
+              <ImageResultMetric label="분류 클래스" value="Scratch" />
             </div>
-          </aside>
-        </div>
+          </div>
+        ) : isObjectDetection ? (
+          <div className="flex flex-col gap-5">
+            <DetectionResultPanel src={model.resultImage || getTaskThumbnail(model.task)} />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <section className="rounded-xl border border-border p-5">
+                <h3 className="text-sm font-semibold">검출된 결함</h3>
+                <p className="mt-1 text-xs text-muted-foreground">박스 라벨과 같은 색상으로 결함 종류를 구분합니다.</p>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {DETECTION_SUMMARY.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 text-sm">
+                      <span className="flex items-center gap-2 font-medium">
+                        <span className={cn("size-2.5 rounded-full", item.dotClass)} />
+                        {item.label}
+                      </span>
+                      <Badge variant="secondary">{item.count}건</Badge>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section className="grid grid-cols-2 gap-3 rounded-xl border border-border p-4">
+                <ImageResultMetric label="검출 결함" value="7" />
+                <ImageResultMetric label="평균 신뢰도" value="58%" />
+              </section>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5">
+            <ResultImagePanel
+              src={model.resultImage || getTaskThumbnail(model.task)}
+              title="모델 처리 결과"
+              caption={resultCaption}
+              badge={model.resultType}
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ResultMetric label="평균 신뢰도" value={`${model.accuracy}%`} description="검출 결과의 평균 신뢰도" />
+              <ResultMetric label="결과 유형" value={model.resultType} description="이미지에 표시된 모델 출력" />
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
 }
 
-function ResultImage({
+const DETECTIONS = [
+  { label: "Scratch", confidence: "0.65", left: "17%", top: "12%", className: "bg-blue-600" },
+  { label: "Scratch", confidence: "0.38", left: "60%", top: "19%", className: "bg-blue-600" },
+  { label: "Dent", confidence: "0.52", left: "14%", top: "34%", className: "bg-emerald-600" },
+  { label: "Dent", confidence: "0.92", left: "37%", top: "30%", className: "bg-emerald-600" },
+  { label: "Paint Defect", confidence: "0.52", left: "20%", top: "57%", className: "bg-amber-600" },
+  { label: "Contamination", confidence: "0.74", left: "85%", top: "49%", className: "bg-violet-600" },
+  { label: "Contamination", confidence: "0.32", left: "68%", top: "69%", className: "bg-violet-600" },
+] as const
+
+const DETECTION_SUMMARY = [
+  { label: "Scratch", count: 2, dotClass: "bg-blue-600" },
+  { label: "Dent", count: 2, dotClass: "bg-emerald-600" },
+  { label: "Paint Defect", count: 1, dotClass: "bg-amber-600" },
+  { label: "Contamination", count: 2, dotClass: "bg-violet-600" },
+] as const
+
+function DetectionResultPanel({ src }: { src: string }) {
+  return (
+    <figure className="overflow-hidden rounded-xl border border-border bg-muted/20">
+      <div className="flex items-center justify-between border-b border-border bg-background px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold">결함 검출 결과</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">각 박스에 결함 종류와 신뢰도가 표시됩니다.</p>
+        </div>
+        <Badge variant="outline">Bounding Box</Badge>
+      </div>
+      <div className="bg-muted p-3 md:p-6">
+        <div className="relative mx-auto aspect-square w-full max-w-4xl overflow-hidden bg-background">
+          <Image
+            src={src}
+            alt="결함 종류와 신뢰도가 표시된 Bounding Box 결과"
+            fill
+            className="object-contain"
+            sizes="(max-width: 1024px) 100vw, 896px"
+          />
+          {DETECTIONS.map((detection, index) => (
+            <span
+              key={`${detection.label}-${index}`}
+              className={cn(
+                "absolute z-10 -translate-y-full whitespace-nowrap rounded-t px-2 py-1 text-[10px] font-semibold text-white shadow-sm sm:text-xs",
+                detection.className
+              )}
+              style={{ left: detection.left, top: detection.top }}
+            >
+              {detection.label} {detection.confidence}
+            </span>
+          ))}
+        </div>
+      </div>
+      <figcaption className="border-t border-border bg-background px-4 py-3 text-xs text-muted-foreground">
+        클래스명 · 신뢰도 형식으로 표시된 모델 검출 결과
+      </figcaption>
+    </figure>
+  )
+}
+
+function ResultImagePanel({
   src,
+  title,
   caption,
   badge,
 }: {
   src: string
+  title: string
   caption: string
   badge?: string
 }) {
   return (
-    <figure className="flex flex-col gap-2">
-      <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-muted">
-        <Image
-          src={src || "/placeholder.svg"}
-          alt={caption}
-          fill
-          className="object-cover"
-          sizes="(max-width: 1024px) 100vw, 40vw"
-        />
-        {badge && <Badge className="absolute left-3 top-3">{badge}</Badge>}
+    <figure className="overflow-hidden rounded-xl border border-border bg-muted/20">
+      <div className="flex items-center justify-between border-b border-border bg-background px-4 py-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {badge ? <Badge variant="outline">{badge}</Badge> : null}
       </div>
-      <figcaption className="text-xs text-muted-foreground">
+      <div className="relative aspect-video bg-muted">
+        <Image
+          src={src}
+          alt={title}
+          fill
+          className="object-contain"
+          sizes="(max-width: 1200px) 100vw, 1100px"
+        />
+      </div>
+      <figcaption className="border-t border-border bg-background px-4 py-3 text-xs text-muted-foreground">
         {caption}
       </figcaption>
     </figure>
   )
 }
 
-function ResultMetric({ label, value }: { label: string; value: string }) {
+function ImageResultMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="font-mono text-lg font-semibold tabular-nums">{value}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
+    <div className="rounded-lg bg-muted/40 p-3">
+      <p className="font-mono text-xl font-bold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+    </div>
+  )
+}
+
+type PredictionLabel = "Normal" | "Bearing Wear" | "Misalignment" | "Overheat"
+
+type PredictionResult = {
+  label: PredictionLabel
+  koreanLabel: string
+  confidence: number
+  anomalyScore: number
+  remainingLife: string
+  description: string
+  recommendation: string
+  isNormal: boolean
+  probabilities: { label: PredictionLabel; value: number }[]
+}
+
+function buildPrediction(values: Record<string, string>): PredictionResult {
+  const temperature = Number(values.TEMP_01 ?? 0)
+  const vibration = Number(values.VIB_VEL ?? 0)
+  const current = Number(values.MOTOR_A ?? 0)
+
+  let label: PredictionLabel = "Normal"
+  if (temperature >= 80) label = "Overheat"
+  else if (vibration >= 10) label = "Misalignment"
+  else if (current >= 12 || vibration >= 7) label = "Bearing Wear"
+
+  const details: Record<PredictionLabel, Omit<PredictionResult, "label" | "probabilities">> = {
+    Normal: {
+      koreanLabel: "정상",
+      confidence: 91,
+      anomalyScore: 0.08,
+      remainingLife: "120일 이상",
+      description: "입력된 센서값에서 뚜렷한 이상 징후가 감지되지 않았습니다.",
+      recommendation: "현재 점검 주기를 유지하세요.",
+      isNormal: true,
+    },
+    "Bearing Wear": {
+      koreanLabel: "베어링 마모",
+      confidence: 88,
+      anomalyScore: 0.82,
+      remainingLife: "약 21일",
+      description: "진동과 모터 전류 패턴에서 베어링 마모 가능성이 감지되었습니다.",
+      recommendation: "베어링 상태를 점검하고 교체 일정을 검토하세요.",
+      isNormal: false,
+    },
+    Misalignment: {
+      koreanLabel: "축 정렬 불량",
+      confidence: 92,
+      anomalyScore: 0.91,
+      remainingLife: "약 14일",
+      description: "진동값이 정상 범위를 크게 벗어나 축 정렬 불량 가능성이 높습니다.",
+      recommendation: "설비 운전을 줄이고 축 정렬 상태를 우선 점검하세요.",
+      isNormal: false,
+    },
+    Overheat: {
+      koreanLabel: "과열",
+      confidence: 94,
+      anomalyScore: 0.95,
+      remainingLife: "약 7일",
+      description: "설비 온도가 기준 범위를 초과해 과열 상태로 판단됩니다.",
+      recommendation: "설비를 즉시 점검하고 냉각 계통을 확인하세요.",
+      isNormal: false,
+    },
+  }
+
+  const probabilitySets: Record<PredictionLabel, number[]> = {
+    Normal: [91, 4, 3, 2],
+    "Bearing Wear": [4, 88, 6, 2],
+    Misalignment: [3, 4, 92, 1],
+    Overheat: [2, 2, 2, 94],
+  }
+  const labels: PredictionLabel[] = ["Normal", "Bearing Wear", "Misalignment", "Overheat"]
+
+  return {
+    label,
+    ...details[label],
+    probabilities: labels.map((item, index) => ({
+      label: item,
+      value: probabilitySets[label][index],
+    })),
+  }
+}
+
+function GenericInferenceResult({
+  model,
+  dataset,
+  values,
+  onRestart,
+}: {
+  model: Model
+  dataset: Dataset
+  values: Record<string, string>
+  onRestart: () => void
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-6 py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Badge className="mb-2 gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <CircleCheck className="size-3.5" />
+              추론 실행 완료
+            </Badge>
+            <h2 className="text-2xl font-semibold">모델 결과가 생성되었습니다</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{model.outputDescription}</p>
+          </div>
+          <Button onClick={onRestart}>
+            <RotateCcw />
+            다른 값으로 다시 실행
+          </Button>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="rounded-xl border border-border p-5">
+            <h3 className="mb-3 text-sm font-semibold">입력값</h3>
+            <dl className="flex flex-col divide-y divide-border">
+              {dataset.columns.map((column) => (
+                <div key={column.name} className="flex items-center justify-between gap-4 py-3 text-sm">
+                  <dt className="font-medium">{column.label}</dt>
+                  <dd className="max-w-[60%] truncate font-mono text-xs">{values[column.name]}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+          <section className="rounded-xl border border-border bg-muted/20 p-5">
+            <p className="text-xs font-medium text-muted-foreground">모델 출력</p>
+            <p className="mt-2 text-xl font-semibold">{model.output}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{model.outputDescription}</p>
+          </section>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ResultMetric({
+  label,
+  value,
+  description,
+}: {
+  label: string
+  value: string
+  description: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-muted/25 p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 font-mono text-2xl font-bold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
     </div>
   )
 }
