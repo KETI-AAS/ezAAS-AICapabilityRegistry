@@ -33,7 +33,7 @@ export function ResultStep({
       <CardContent className="flex flex-col gap-6 py-2">
         <div className="flex items-start gap-3">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-            6
+            7
           </span>
           <div>
             <h2 className="text-lg font-semibold">결과 확인</h2>

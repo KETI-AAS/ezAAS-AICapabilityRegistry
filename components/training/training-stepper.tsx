@@ -11,6 +11,7 @@ export const TRAINING_STEPS = [
   "데이터 업로드",
   "Semantic Mapping",
   "데이터 검증",
+  "자동 전처리",
   "AI Training",
   "결과 확인",
 ] as const

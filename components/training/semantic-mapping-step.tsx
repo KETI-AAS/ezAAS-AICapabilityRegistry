@@ -3,14 +3,7 @@
 import {
   ArrowLeft,
   ArrowRight,
-  Check,
-  CircleCheck,
-  Database,
   Info,
-  Link2,
-  Minus,
-  SlidersHorizontal,
-  X,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -19,16 +12,18 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import {
   TRAINING_MAPPING_ROWS,
+  UPLOAD_PREVIEW_COLUMNS,
+  type TrainingMappingRow,
   type TrainingMappingStatus,
 } from "@/lib/training-data"
 import { cn } from "@/lib/utils"
 
-const PIPELINE = [
-  { icon: Database, label: "스키마 로드" },
-  { icon: Link2, label: "의미 기반 매핑" },
-  { icon: SlidersHorizontal, label: "전처리 생성" },
-  { icon: CircleCheck, label: "검토 및 검증" },
-]
+const MAPPING_COLUMNS = Array.from(
+  new Set([
+    ...UPLOAD_PREVIEW_COLUMNS,
+    ...TRAINING_MAPPING_ROWS.map((row) => row.column),
+  ]),
+)
 
 function confidenceColor(value: number): string {
   if (value >= 0.8) return "bg-emerald-500"
@@ -55,14 +50,30 @@ function StatusBadge({ status }: { status: TrainingMappingStatus }) {
 }
 
 export function SemanticMappingStep({
+  mappingRows,
+  onMappingRowsChange,
   onBack,
   onNext,
 }: {
+  mappingRows: TrainingMappingRow[]
+  onMappingRowsChange: (rows: TrainingMappingRow[]) => void
   onBack: () => void
   onNext: () => void
 }) {
-  const autoCount = TRAINING_MAPPING_ROWS.filter((r) => r.status === "auto").length
-  const reviewCount = TRAINING_MAPPING_ROWS.filter((r) => r.status === "review").length
+  const autoCount = mappingRows.filter((row) => row.status === "auto").length
+  const reviewCount = mappingRows.filter((row) => row.status === "review").length
+  const excludedCount = mappingRows.filter((row) => row.status === "excluded").length
+
+  const updateMapping = (
+    semanticId: string,
+    updates: Partial<(typeof mappingRows)[number]>,
+  ) => {
+    onMappingRowsChange(
+      mappingRows.map((row) =>
+        row.semanticId === semanticId ? { ...row, ...updates } : row,
+      ),
+    )
+  }
 
   return (
     <Card>
@@ -75,7 +86,7 @@ export function SemanticMappingStep({
             <div>
               <h2 className="text-lg font-semibold">Semantic Mapping (자동 전처리)</h2>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                모델 입력 스키마의 Semantic ID와 업로드한 데이터 컬럼을 자동으로 매핑합니다.
+                모델 입력 컬럼과 업로드한 데이터 컬럼을 자동으로 매핑합니다.
               </p>
             </div>
           </div>
@@ -86,25 +97,8 @@ export function SemanticMappingStep({
             <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-500">
               검토 필요 {reviewCount}
             </Badge>
+            <Badge variant="secondary">제외 {excludedCount}</Badge>
           </div>
-        </div>
-
-        {/* Pipeline */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-border bg-muted/30 px-4 py-3">
-          {PIPELINE.map((step, index) => (
-            <div key={step.label} className="flex items-center gap-2">
-              <span className="relative flex size-8 items-center justify-center rounded-full bg-background text-muted-foreground ring-1 ring-border">
-                <step.icon className="size-4" />
-                <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-emerald-500 text-white">
-                  <Check className="size-2.5" />
-                </span>
-              </span>
-              <span className="text-sm font-medium">{step.label}</span>
-              {index < PIPELINE.length - 1 && (
-                <Separator className="ml-2 hidden w-6 md:block" />
-              )}
-            </div>
-          ))}
         </div>
 
         <div className="grid gap-6 2xl:grid-cols-[1fr_300px]">
@@ -114,7 +108,7 @@ export function SemanticMappingStep({
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                   <th className="px-3 py-2.5 font-medium">
-                    모델 입력 스키마 (Semantic ID)
+                    모델 입력 컬럼
                   </th>
                   <th className="px-3 py-2.5 font-medium">의미</th>
                   <th className="px-3 py-2.5 font-medium">선택된 컬럼</th>
@@ -124,18 +118,37 @@ export function SemanticMappingStep({
                 </tr>
               </thead>
               <tbody>
-                {TRAINING_MAPPING_ROWS.map((row) => (
+                {mappingRows.map((row) => (
                   <tr
                     key={row.semanticId}
                     className="border-b border-border last:border-0"
                   >
                     <td className="px-3 py-3 font-mono text-xs">
-                      {row.semanticId}
+                      {row.semanticId.replace("IDTA:Property:", "")}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">
                       {row.meaning}
                     </td>
-                    <td className="px-3 py-3 font-mono text-xs">{row.column}</td>
+                    <td className="px-3 py-3">
+                      <select
+                        value={row.column}
+                        aria-label={`${row.meaning} 매핑 컬럼`}
+                        className="h-8 min-w-32 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                        onChange={(event) =>
+                          updateMapping(row.semanticId, {
+                            column: event.target.value,
+                            confidence: 0.75,
+                            status: "review",
+                          })
+                        }
+                      >
+                        {MAPPING_COLUMNS.map((column) => (
+                          <option key={column} value={column}>
+                            {column}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                       {row.type}
                     </td>
@@ -156,7 +169,9 @@ export function SemanticMappingStep({
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <StatusBadge status={row.status} />
+                      <div className="flex min-w-24 items-center">
+                        <StatusBadge status={row.status} />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -171,12 +186,12 @@ export function SemanticMappingStep({
               <h3 className="text-sm font-semibold">Semantic Mapping 안내</h3>
             </div>
             <p className="text-xs leading-5 text-muted-foreground">
-              모델 학습에 사용된 데이터셋의 AAS 서브모델에서 Semantic ID와 의미 정보를 읽고, 업로드한 데이터 컬럼의 이름, 단위, 데이터 타입 및 값 분포를 비교하여 자동으로 매핑합니다.
+              모델 입력 컬럼과 업로드한 데이터 컬럼의 이름, 단위, 데이터 타입 및 값 분포를 비교하여 자동으로 매핑합니다.
             </p>
             <div>
               <p className="mb-2 text-xs font-medium">매핑 기준</p>
               <ul className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-                {["Semantic ID 의미", "컬럼명 유사도", "단위 일치", "데이터 타입", "값 분포 및 통계"].map(
+                {["컬럼 의미", "컬럼명 유사도", "단위 일치", "데이터 타입", "값 분포 및 통계"].map(
                   (item) => (
                     <li key={item} className="flex items-center gap-2">
                       <span className="size-1.5 rounded-full bg-primary" />
@@ -205,22 +220,6 @@ export function SemanticMappingStep({
               </ul>
             </div>
           </aside>
-        </div>
-
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <Check className="size-3.5 text-emerald-500" />
-            자동 매핑
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Minus className="size-3.5 text-amber-500" />
-            검토 필요
-          </span>
-          <span className="flex items-center gap-1.5">
-            <X className="size-3.5 text-red-500" />
-            제외
-          </span>
         </div>
 
         <div className="flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-between">

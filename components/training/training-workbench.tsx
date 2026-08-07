@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { ModelSelectionStep } from "@/components/training/model-selection-step"
+import { DataPreprocessingStep } from "@/components/training/data-preprocessing-step"
 import { ResultStep } from "@/components/training/result-step"
 import { SemanticMappingStep } from "@/components/training/semantic-mapping-step"
 import { TrainingStepper } from "@/components/training/training-stepper"
@@ -14,21 +15,26 @@ import {
 } from "@/components/training/training-run-step"
 import { UploadStep, type UploadedFile } from "@/components/training/upload-step"
 import { ValidationStep } from "@/components/training/validation-step"
-import { TRAINING_LOG_LINES } from "@/lib/training-data"
+import {
+  TRAINING_LOG_LINES,
+  TRAINING_MAPPING_ROWS,
+  UPLOAD_PREVIEW_ROWS,
+} from "@/lib/training-data"
 import { getModel } from "@/lib/registry-data"
 
 const DEFAULT_CONFIG: TrainingConfig = {
-  method: "Fine-tuning",
-  epoch: "20",
-  batchSize: "32",
-  learningRate: "Auto",
-  gpu: "Auto",
+  intensity: "quick",
+  epoch: "10",
+  trainRatio: 80,
 }
 
 export function TrainingWorkbench() {
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [file, setFile] = useState<UploadedFile | null>(null)
+  const [mappingRows, setMappingRows] = useState(() =>
+    TRAINING_MAPPING_ROWS.map((row) => ({ ...row })),
+  )
 
   const [config, setConfig] = useState<TrainingConfig>(DEFAULT_CONFIG)
   const [status, setStatus] = useState<TrainingStatus>("idle")
@@ -81,7 +87,7 @@ export function TrainingWorkbench() {
         setLogIndex(TRAINING_LOG_LINES.length)
         setProgress(100)
         toast.success("AI Training이 완료되었습니다")
-        setCurrentStep(6)
+        setCurrentStep(7)
       }
     }, 60)
   }
@@ -99,6 +105,7 @@ export function TrainingWorkbench() {
     setCurrentStep(1)
     setSelectedModelId(null)
     setFile(null)
+    setMappingRows(TRAINING_MAPPING_ROWS.map((row) => ({ ...row })))
     setConfig(DEFAULT_CONFIG)
     setStatus("idle")
     setProgress(0)
@@ -138,6 +145,8 @@ export function TrainingWorkbench() {
 
       {currentStep === 3 && (
         <SemanticMappingStep
+          mappingRows={mappingRows}
+          onMappingRowsChange={setMappingRows}
           onBack={() => setCurrentStep(2)}
           onNext={() => setCurrentStep(4)}
         />
@@ -145,29 +154,40 @@ export function TrainingWorkbench() {
 
       {currentStep === 4 && (
         <ValidationStep
-          onBack={() => setCurrentStep(3)}
+          mappingRows={mappingRows}
+          onReupload={() => setCurrentStep(2)}
           onNext={() => setCurrentStep(5)}
         />
       )}
 
       {currentStep === 5 && (
+        <DataPreprocessingStep
+          mappingRows={mappingRows}
+          sourceRowCount={file?.rowCount ?? UPLOAD_PREVIEW_ROWS.length}
+          onBack={() => setCurrentStep(4)}
+          onReupload={() => setCurrentStep(2)}
+          onNext={() => setCurrentStep(6)}
+        />
+      )}
+
+      {currentStep === 6 && (
         <TrainingRunStep
           config={config}
           onConfigChange={setConfig}
           status={status}
           progress={progress}
           logIndex={logIndex}
-          onBack={() => setCurrentStep(4)}
+          onBack={() => setCurrentStep(5)}
           onStart={startTraining}
           onStop={stopTraining}
         />
       )}
 
-      {currentStep === 6 && selectedModel && (
+      {currentStep === 7 && selectedModel && (
         <ResultStep
           model={selectedModel}
           datasetFileName={file?.name ?? "legacy_data.csv"}
-          onBack={() => setCurrentStep(5)}
+          onBack={() => setCurrentStep(6)}
           onRestart={restart}
         />
       )}

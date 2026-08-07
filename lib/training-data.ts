@@ -36,8 +36,8 @@ export const TRAINING_MAPPING_ROWS: TrainingMappingRow[] = [
     meaning: "스핀들 회전수 (RPM)",
     column: "RPM_ACT",
     type: "int",
-    confidence: 0.91,
-    status: "auto",
+    confidence: 0.31,
+    status: "excluded",
   },
   {
     semanticId: "IDTA:Property:motor.current",
@@ -68,10 +68,32 @@ export const TRAINING_MAPPING_ROWS: TrainingMappingRow[] = [
     meaning: "측정 시간",
     column: "TIMESTAMP",
     type: "datetime",
-    confidence: 1.0,
-    status: "auto",
+    confidence: 0.4,
+    status: "excluded",
   },
 ]
+
+// Mock LLM validation response. Replace this with the API response later.
+export const TRAINING_VALIDATION_RESULTS = [
+  {
+    title: "결측치 비율 높음",
+    description: "결측치가 많아 학습 성능이 저하될 수 있습니다.",
+    recommendation: "중앙값으로 결측치 대체",
+    detail: "극단값의 영향을 적게 받는 중앙값으로 빈 데이터를 대체합니다.",
+  },
+  {
+    title: "라벨 인코딩 필요",
+    description: "문자열 값을 숫자형 라벨로 변환해야 합니다.",
+    recommendation: "Label Encoding 적용",
+    detail: "문자열 라벨을 모델이 학습할 수 있는 숫자형 클래스 ID로 변환합니다.",
+  },
+  {
+    title: "클래스 불균형",
+    description: "소수 클래스가 충분히 학습되지 않을 수 있습니다.",
+    recommendation: "Class Weight 적용",
+    detail: "소수 클래스가 학습에 충분히 반영되도록 클래스별 가중치를 적용합니다.",
+  },
+] as const
 
 export const TRAINING_MAPPING_PIPELINE = [
   "스키마 로드",
@@ -83,7 +105,7 @@ export const TRAINING_MAPPING_PIPELINE = [
 // Column values used both for the upload preview and mapping reference.
 export const UPLOAD_PREVIEW_COLUMNS = [
   "TIMESTAMP",
-  "MACHINE_ID",
+  "AIR_PRESS",
   "TEMP_01",
   "VIB_VEL",
   "RPM_ACT",
@@ -92,11 +114,11 @@ export const UPLOAD_PREVIEW_COLUMNS = [
 ]
 
 export const UPLOAD_PREVIEW_ROWS: string[][] = [
-  ["2024-05-28 09:12:04", "PCB-LINE-02", "62.4", "3.12", "1492", "8.4", "NORMAL"],
-  ["2024-05-28 09:12:05", "PCB-LINE-02", "62.8", "3.18", "1495", "8.6", "NORMAL"],
-  ["2024-05-28 09:12:06", "PCB-LINE-02", "63.1", "7.84", "1521", "12.7", "SOLDER"],
-  ["2024-05-28 09:12:07", "PCB-LINE-07", "59.7", "2.94", "1480", "7.9", "NORMAL"],
-  ["2024-05-28 09:12:08", "PCB-LINE-07", "60.2", "3.02", "1483", "8.1", "BRIDGE"],
+  ["2024-05-28 09:12:04", "5.2", "62.4", "3.12", "1492", "8.4", "NORMAL"],
+  ["2024-05-28 09:12:05", "5.1", "62.8", "3.18", "1495", "8.6", "NORMAL"],
+  ["2024-05-28 09:12:06", "5.3", "63.1", "7.84", "1521", "12.7", "SOLDER"],
+  ["2024-05-28 09:12:07", "5.1", "59.7", "2.94", "1480", "7.9", "NORMAL"],
+  ["2024-05-28 09:12:08", "5.2", "60.2", "3.02", "1483", "8.1", "BRIDGE"],
 ]
 
 export interface ValidationItem {

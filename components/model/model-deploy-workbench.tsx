@@ -10,7 +10,9 @@ import {
   Database,
   FileImage,
   LoaderCircle,
+  Minus,
   Play,
+  Plus,
   Power,
   RotateCcw,
   Server,
@@ -63,45 +65,47 @@ function formatFileSize(bytes: number): string {
 
 function StepIndicator({ currentStep }: { currentStep: number }) {
   return (
-    <Card size="sm">
-      <CardContent className="py-1">
-        <ol className="flex items-center gap-1 overflow-x-auto">
-          {STEPS.map((label, index) => {
-            const stepNumber = index + 1
-            const isComplete = stepNumber < currentStep
-            const isCurrent = stepNumber === currentStep
+    <ol className="grid grid-cols-3 items-center gap-2 sm:gap-4">
+      {STEPS.map((label, index) => {
+        const stepNumber = index + 1
+        const isComplete = stepNumber < currentStep
+        const isCurrent = stepNumber === currentStep
 
-            return (
-              <li key={label} className="flex min-w-0 items-center gap-1">
-                <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    className={cn(
-                      "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                      (isComplete || isCurrent) && "bg-primary text-primary-foreground",
-                      !isComplete && !isCurrent &&
-                        "border border-border bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {isComplete ? <Check className="size-3.5" /> : stepNumber}
-                  </span>
-                  <span
-                    className={cn(
-                      "whitespace-nowrap text-sm",
-                      isCurrent ? "font-medium text-foreground" : "text-muted-foreground"
-                    )}
-                  >
-                    {label}
-                  </span>
-                </div>
-                {index < STEPS.length - 1 && (
-                  <Separator className="mx-2 hidden w-10 shrink-0 sm:block md:w-16" />
+        return (
+          <li key={label} className="relative flex min-w-0 items-center">
+            <div className="relative z-10 flex min-w-0 items-center gap-2 bg-background pr-2 sm:gap-2.5 sm:pr-4">
+              <span
+                className={cn(
+                  "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors",
+                  isCurrent && "border-primary bg-primary text-primary-foreground",
+                  isComplete && "border-primary/20 bg-primary/10 text-primary",
+                  !isComplete && !isCurrent &&
+                    "border-border bg-muted/60 text-muted-foreground"
                 )}
-              </li>
-            )
-          })}
-        </ol>
-      </CardContent>
-    </Card>
+              >
+                {isComplete ? <Check className="size-3.5" /> : stepNumber}
+              </span>
+              <span
+                className={cn(
+                  "truncate text-xs sm:text-sm",
+                  isCurrent
+                    ? "font-semibold text-foreground"
+                    : isComplete
+                      ? "font-medium text-foreground/80"
+                      : "font-medium text-muted-foreground"
+                )}
+              >
+                {label}
+              </span>
+            </div>
+
+            {index < STEPS.length - 1 && (
+              <span className="absolute left-6 right-0 top-1/2 h-px -translate-y-1/2 bg-border" />
+            )}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -121,6 +125,10 @@ export function ModelDeployWorkbench({
     useState<InstanceStatus>("provisioning")
   const [remainingSeconds, setRemainingSeconds] = useState(SESSION_SECONDS)
   const [values, setValues] = useState<Record<string, string>>(emptyValues)
+  const [inputRows, setInputRows] = useState<Record<string, string>[]>(() =>
+    Array.from({ length: 3 }, () => ({ ...emptyValues }))
+  )
+  const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({})
   const [executionStatus, setExecutionStatus] =
     useState<ExecutionStatus>("idle")
@@ -157,11 +165,19 @@ export function ModelDeployWorkbench({
   const isRunning = instanceStatus === "running"
   const isExpired = instanceStatus === "expired"
   const currentStep = executionStatus === "complete" ? 3 : executionStatus === "running" ? 2 : 1
-  const completedCount = dataset.columns.filter(
-    (column) => values[column.name]?.trim().length > 0
-  ).length
-  const completionPercent = dataset.columns.length
-    ? (completedCount / dataset.columns.length) * 100
+  const isImageInput = dataset.dataType === "이미지"
+  const completedCount = isImageInput
+    ? dataset.columns.filter((column) => values[column.name]?.trim().length > 0).length
+    : inputRows.reduce(
+        (count, row) =>
+          count + dataset.columns.filter((column) => row[column.name]?.trim().length > 0).length,
+        0
+      )
+  const totalInputCount = isImageInput
+    ? dataset.columns.length
+    : inputRows.length * dataset.columns.length
+  const completionPercent = totalInputCount
+    ? (completedCount / totalInputCount) * 100
     : 0
   const isClassPrediction = dataset.task !== "OCR"
   const predictionItems = isClassPrediction
@@ -169,9 +185,16 @@ export function ModelDeployWorkbench({
     : model.outputItems
   const canRun =
     isRunning &&
-    dataset.columns.every(
-      (column) => !column.required || values[column.name]?.trim().length > 0
-    )
+    (isImageInput
+      ? dataset.columns.every(
+          (column) => !column.required || values[column.name]?.trim().length > 0
+        )
+      : inputRows.length > 0 &&
+        inputRows.every((row) =>
+          dataset.columns.every(
+            (column) => !column.required || row[column.name]?.trim().length > 0
+          )
+        ))
 
   const runInference = () => {
     if (!canRun) return
@@ -190,8 +213,70 @@ export function ModelDeployWorkbench({
 
   const restart = () => {
     setValues(emptyValues)
+    setInputRows(Array.from({ length: 3 }, () => ({ ...emptyValues })))
+    setSelectedRows([])
     setSelectedFiles({})
     setExecutionStatus("idle")
+  }
+
+  const updateRowValue = (rowIndex: number, columnName: string, value: string) => {
+    setInputRows((current) =>
+      current.map((row, index) =>
+        index === rowIndex ? { ...row, [columnName]: value } : row
+      )
+    )
+  }
+
+  const handleTablePaste = (
+    event: React.ClipboardEvent<HTMLInputElement>,
+    startRowIndex: number,
+    startColumnIndex: number,
+  ) => {
+    const clipboardText = event.clipboardData.getData("text")
+    const trimmedText = clipboardText.replace(/(?:\r?\n)+$/, "")
+    const delimiter = trimmedText.includes("\t")
+      ? "\t"
+      : trimmedText.includes(",")
+        ? ","
+        : null
+    const pastedRows = trimmedText
+      .split(/\r?\n/)
+      .map((row) => (delimiter ? row.split(delimiter) : [row]))
+
+    const isMultiCellPaste = pastedRows.length > 1 || pastedRows[0]?.length > 1
+    if (!isMultiCellPaste) return
+
+    event.preventDefault()
+    setInputRows((current) => {
+      const requiredRowCount = startRowIndex + pastedRows.length
+      const nextRows = current.map((row) => ({ ...row }))
+
+      while (nextRows.length < requiredRowCount) {
+        nextRows.push({ ...emptyValues })
+      }
+
+      pastedRows.forEach((pastedRow, rowOffset) => {
+        pastedRow.forEach((pastedValue, columnOffset) => {
+          const column = dataset.columns[startColumnIndex + columnOffset]
+          if (!column) return
+          nextRows[startRowIndex + rowOffset][column.name] = String(pastedValue)
+        })
+      })
+
+      return nextRows
+    })
+  }
+
+  const addRow = () => {
+    setInputRows((current) => [...current, { ...emptyValues }])
+  }
+
+  const deleteSelectedRows = () => {
+    if (!selectedRows.length) return
+    setInputRows((current) =>
+      current.filter((_, index) => !selectedRows.includes(index))
+    )
+    setSelectedRows([])
   }
 
   return (
@@ -300,10 +385,12 @@ export function ModelDeployWorkbench({
           </Alert>
         ) : (
           <>
-            <StepIndicator currentStep={currentStep} />
-
             {executionStatus !== "complete" ? (
               <Card className="overflow-hidden">
+                <div className="border-b border-border bg-background px-5 py-3.5 sm:px-6">
+                  <StepIndicator currentStep={currentStep} />
+                </div>
+
                 <div className="border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 py-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -324,7 +411,7 @@ export function ModelDeployWorkbench({
                       <div className="flex items-center justify-between gap-4 text-sm">
                         <span className="text-muted-foreground">입력 완료</span>
                         <strong className="font-mono text-primary">
-                          {completedCount} / {dataset.columns.length}
+                          {completedCount} / {totalInputCount}
                         </strong>
                       </div>
                       <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
@@ -339,125 +426,163 @@ export function ModelDeployWorkbench({
 
                 <CardContent className="flex flex-col gap-6 py-6">
                   <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-                    <div className="flex flex-col gap-3">
-                      {dataset.columns.map((column, index) => {
-                        const inputId = `inference-${column.name}`
-                        const hasValue = values[column.name]?.trim().length > 0
+                    <div className="min-w-0">
+                      {isImageInput ? (
+                        <div className="flex flex-col gap-3">
+                          {dataset.columns.map((column, index) => {
+                            const inputId = `inference-${column.name}`
+                            const hasValue = values[column.name]?.trim().length > 0
 
-                        return (
-                          <div
-                            key={column.name}
-                            className={cn(
-                              "grid gap-4 rounded-xl border p-4 transition-colors sm:grid-cols-[minmax(0,1fr)_240px] sm:items-center",
-                              hasValue
-                                ? "border-primary/30 bg-primary/[0.025]"
-                                : "border-border bg-card"
-                            )}
-                          >
-                            <div className="flex min-w-0 items-start gap-3">
-                              <span
+                            return (
+                              <div
+                                key={column.name}
                                 className={cn(
-                                  "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                                  "grid gap-4 rounded-xl border p-4 transition-colors sm:grid-cols-[minmax(0,1fr)_240px] sm:items-center",
                                   hasValue
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground"
+                                    ? "border-primary/30 bg-primary/[0.025]"
+                                    : "border-border bg-card"
                                 )}
                               >
-                                {hasValue ? <Check className="size-4" /> : index + 1}
-                              </span>
-                              <div className="min-w-0">
-                                <label htmlFor={inputId} className="flex flex-wrap items-center gap-2 font-semibold">
-                                  {column.label}
-                                  {column.required ? <span className="text-destructive">*</span> : null}
-                                </label>
-                                <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                                  {column.name}
-                                </p>
-                                <p id={`${inputId}-description`} className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                                  {column.description}
-                                </p>
-                              </div>
-                            </div>
-
-                            {column.type === "image" ? (
-                              <div>
-                                <input
-                                  id={inputId}
-                                  type="file"
-                                  accept="image/*"
-                                  className="sr-only"
-                                  disabled={executionStatus === "running"}
-                                  onChange={(event) => {
-                                    selectImageFile(column.name, event.target.files?.[0])
-                                    event.target.value = ""
-                                  }}
-                                  aria-describedby={`${inputId}-description`}
-                                />
-                                <label
-                                  htmlFor={inputId}
-                                  className={cn(
-                                    "flex min-h-20 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition-colors",
-                                    selectedFiles[column.name]
-                                      ? "border-primary/40 bg-primary/5"
-                                      : "border-border bg-background hover:border-primary/50 hover:bg-primary/5",
-                                    executionStatus === "running" && "pointer-events-none opacity-60"
-                                  )}
-                                >
-                                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                    {selectedFiles[column.name] ? (
-                                      <FileImage className="size-5" />
-                                    ) : (
-                                      <UploadCloud className="size-5" />
-                                    )}
+                                <div className="flex min-w-0 items-start gap-3">
+                                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                                    {index + 1}
                                   </span>
-                                  <span className="min-w-0">
-                                    {selectedFiles[column.name] ? (
-                                      <>
-                                        <span className="block truncate text-sm font-semibold">
-                                          {selectedFiles[column.name].name}
-                                        </span>
-                                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                                          {formatFileSize(selectedFiles[column.name].size)} · 클릭하여 변경
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <>
+                                  <div className="min-w-0">
+                                    <label htmlFor={inputId} className="flex flex-wrap items-center gap-2 font-semibold">
+                                      {column.label}
+                                      {column.required ? <span className="text-destructive">*</span> : null}
+                                    </label>
+                                    <p className="mt-0.5 font-mono text-xs text-muted-foreground">{column.name}</p>
+                                  </div>
+                                </div>
+                                <div>
+                                  <input
+                                    id={inputId}
+                                    type="file"
+                                    accept="image/*"
+                                    className="sr-only"
+                                    disabled={executionStatus === "running"}
+                                    onChange={(event) => {
+                                      selectImageFile(column.name, event.target.files?.[0])
+                                      event.target.value = ""
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={inputId}
+                                    className={cn(
+                                      "flex min-h-20 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition-colors",
+                                      selectedFiles[column.name]
+                                        ? "border-primary/40 bg-primary/5"
+                                        : "border-border bg-background hover:border-primary/50 hover:bg-primary/5",
+                                      executionStatus === "running" && "pointer-events-none opacity-60"
+                                    )}
+                                  >
+                                    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                      {selectedFiles[column.name] ? <FileImage className="size-5" /> : <UploadCloud className="size-5" />}
+                                    </span>
+                                    <span className="min-w-0">
+                                      {selectedFiles[column.name] ? (
+                                        <>
+                                          <span className="block truncate text-sm font-semibold">{selectedFiles[column.name].name}</span>
+                                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                                            {formatFileSize(selectedFiles[column.name].size)} · 클릭하여 변경
+                                          </span>
+                                        </>
+                                      ) : (
                                         <span className="block text-sm font-semibold">이미지 파일 선택</span>
-                                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                                          JPG, PNG, WEBP 등
-                                        </span>
-                                      </>
-                                    )}
-                                  </span>
-                                </label>
+                                      )}
+                                    </span>
+                                  </label>
+                                </div>
                               </div>
-                            ) : (
-                              <div className="relative">
-                                <Input
-                                  id={inputId}
-                                  type={inputType(column)}
-                                  step={column.type === "number" ? "any" : undefined}
-                                  value={values[column.name] ?? ""}
-                                  onChange={(event) =>
-                                    setValues((current) => ({
-                                      ...current,
-                                      [column.name]: event.target.value,
-                                    }))
-                                  }
-                                  disabled={executionStatus === "running"}
-                                  aria-describedby={`${inputId}-description`}
-                                  className={cn("h-12 bg-background text-base", column.unit && "pr-16")}
-                                />
-                                {column.unit ? (
-                                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 border-l border-border pl-3 font-mono text-xs font-medium text-muted-foreground">
-                                    {column.unit}
-                                  </span>
-                                ) : null}
-                              </div>
-                            )}
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="overflow-hidden rounded-xl border border-border">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/20 px-4 py-3">
+                            <div>
+                              <span className="text-sm font-semibold">입력 데이터</span>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                Excel 또는 스프레드시트에서 복사한 값을 셀에 붙여넣을 수 있습니다.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={executionStatus === "running"}>
+                                <Plus className="size-4" />
+                                행 추가
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={deleteSelectedRows} disabled={!selectedRows.length || executionStatus === "running"}>
+                                <Minus className="size-4" />
+                                선택 행 삭제
+                              </Button>
+                            </div>
                           </div>
-                        )
-                      })}
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[680px] border-collapse text-sm">
+                              <thead className="bg-muted/35">
+                                <tr>
+                                  <th className="w-12 border-b border-r border-border px-3 py-3 text-center">
+                                    <input
+                                      type="checkbox"
+                                      aria-label="전체 행 선택"
+                                      checked={inputRows.length > 0 && selectedRows.length === inputRows.length}
+                                      onChange={(event) =>
+                                        setSelectedRows(event.target.checked ? inputRows.map((_, index) => index) : [])
+                                      }
+                                    />
+                                  </th>
+                                  <th className="w-14 border-b border-r border-border px-3 py-3 text-center font-semibold">No.</th>
+                                  {dataset.columns.map((column) => (
+                                    <th key={column.name} className="min-w-44 border-b border-r border-border px-4 py-3 text-left last:border-r-0">
+                                      <div className="font-semibold">
+                                        {column.label}{column.unit ? ` (${column.unit})` : ""}
+                                        {column.required ? <span className="ml-1 text-destructive">*</span> : null}
+                                      </div>
+                                      <div className="mt-1 font-mono text-xs font-normal text-muted-foreground">{column.name}</div>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {inputRows.map((row, rowIndex) => (
+                                  <tr key={rowIndex} className="bg-background">
+                                    <td className="border-b border-r border-border px-3 py-3 text-center">
+                                      <input
+                                        type="checkbox"
+                                        aria-label={`${rowIndex + 1}행 선택`}
+                                        checked={selectedRows.includes(rowIndex)}
+                                        onChange={(event) =>
+                                          setSelectedRows((current) =>
+                                            event.target.checked
+                                              ? [...current, rowIndex]
+                                              : current.filter((index) => index !== rowIndex)
+                                          )
+                                        }
+                                      />
+                                    </td>
+                                    <td className="border-b border-r border-border px-3 py-3 text-center font-mono text-muted-foreground">{rowIndex + 1}</td>
+                                    {dataset.columns.map((column, columnIndex) => (
+                                      <td key={column.name} className="border-b border-r border-border p-2 last:border-r-0">
+                                        <Input
+                                          type={inputType(column)}
+                                          step={column.type === "number" ? "any" : undefined}
+                                          value={row[column.name] ?? ""}
+                                          onChange={(event) => updateRowValue(rowIndex, column.name, event.target.value)}
+                                          onPaste={(event) => handleTablePaste(event, rowIndex, columnIndex)}
+                                          disabled={executionStatus === "running"}
+                                          placeholder="값 입력"
+                                          className="h-10 min-w-36 bg-background"
+                                        />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <aside className="h-fit rounded-xl border border-border bg-muted/25 p-5 lg:sticky lg:top-6">
@@ -526,7 +651,7 @@ export function ModelDeployWorkbench({
               <InferenceResult
                 model={model}
                 dataset={dataset}
-                values={values}
+                values={isImageInput ? values : inputRows[inputRows.length - 1] ?? emptyValues}
                 onRestart={restart}
               />
             )}
@@ -579,6 +704,9 @@ function InferenceResult({
 
   return (
     <Card className="overflow-hidden">
+      <div className="border-b border-border bg-background px-5 py-3.5 sm:px-6">
+        <StepIndicator currentStep={3} />
+      </div>
       <CardContent className="flex flex-col gap-6 py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -729,6 +857,9 @@ function ImageInferenceResult({
 
   return (
     <Card className="overflow-hidden">
+      <div className="border-b border-border bg-background px-5 py-3.5 sm:px-6">
+        <StepIndicator currentStep={3} />
+      </div>
       <CardContent className="flex flex-col gap-6 py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1025,7 +1156,10 @@ function GenericInferenceResult({
   onRestart: () => void
 }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
+      <div className="border-b border-border bg-background px-5 py-3.5 sm:px-6">
+        <StepIndicator currentStep={3} />
+      </div>
       <CardContent className="flex flex-col gap-6 py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
