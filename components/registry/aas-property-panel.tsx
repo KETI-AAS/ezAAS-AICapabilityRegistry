@@ -141,10 +141,13 @@ export function AasPropertyPanel({
         <SectionLabel icon={Info}>Property</SectionLabel>
         <Field
           label="idShort"
-          value={node.label}
+          value={node.idShort ?? node.label}
           editable={editable}
-          onChange={(v) => patch({ label: v })}
+          onChange={(v) => patch({ idShort: v, label: v })}
         />
+        {node.externalId && <Field label="id" value={node.externalId} mono />}
+        {node.modelType && <Field label="modelType" value={node.modelType} mono />}
+        {node.valuePath && <Field label="valuePath" value={node.valuePath} mono />}
         {(node.valueType || editable) && hasValue && node.type !== "File" && (
           <Field
             label="valueType"

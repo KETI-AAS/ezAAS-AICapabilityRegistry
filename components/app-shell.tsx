@@ -1,12 +1,13 @@
 "use client"
 
-import { Boxes, Database, FilePlus2, Home, Layers, Link2, Menu, ShieldCheck, Sparkles } from "lucide-react"
+import { Boxes, Brain, Database, FilePlus2, Home, Layers, Link2, Menu, ShieldCheck, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 
 import { SidebarAuth } from "@/components/auth/sidebar-auth"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,7 @@ const nav = [
   { label: "AI Asset Pairs", href: "/pairs", icon: Link2 },
   { label: "AI Dataset", href: "/datasets", icon: Database },
   { label: "AI Model", href: "/models", icon: Boxes },
+  { label: "AI Training", href: "/training", icon: Brain, badge: "New" },
   { label: "AI 자산 등록", href: "/register", icon: FilePlus2 },
   { label: "Admin", href: "/admin", icon: ShieldCheck },
 ]
@@ -44,7 +46,12 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             )}
           >
             <Icon className="size-4 shrink-0" />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {item.badge && (
+              <Badge className="h-5 shrink-0 rounded-full border-primary/20 bg-primary/10 px-2 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                {item.badge}
+              </Badge>
+            )}
           </Link>
         )
       })}
