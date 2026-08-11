@@ -126,7 +126,7 @@ export function ModelDeployWorkbench({
   const [remainingSeconds, setRemainingSeconds] = useState(SESSION_SECONDS)
   const [values, setValues] = useState<Record<string, string>>(emptyValues)
   const [inputRows, setInputRows] = useState<Record<string, string>[]>(() =>
-    Array.from({ length: 3 }, () => ({ ...emptyValues }))
+    Array.from({ length: 1 }, () => ({ ...emptyValues }))
   )
   const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({})
