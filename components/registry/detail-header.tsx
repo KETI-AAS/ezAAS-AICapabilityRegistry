@@ -44,6 +44,8 @@ type DetailHeaderProps = {
     icon: typeof Download
     href?: string
     newTab?: boolean
+    disabled?: boolean
+    disabledReason?: string
   }
   /** Extra action buttons rendered alongside the favorite / primary action. */
   actions?: React.ReactNode
@@ -280,7 +282,7 @@ export function DetailHeader({
               <>
                 <div className="hidden h-14 w-px shrink-0 bg-border sm:block" />
 
-                {primaryAction.href ? (
+                {primaryAction.href && !primaryAction.disabled ? (
                   <Button
                     nativeButton={false}
                     render={
@@ -297,6 +299,8 @@ export function DetailHeader({
                   </Button>
                 ) : (
                   <Button
+                    disabled={primaryAction.disabled}
+                    title={primaryAction.disabledReason}
                     className="ml-0 h-12 grow basis-full rounded-2xl px-6 text-base sm:ml-5 sm:h-16 sm:grow-0 sm:basis-auto"
                     onClick={() =>
                       toast.info(`${primaryAction.label} 요청을 시작했습니다`)
@@ -382,26 +386,24 @@ function PairDetailHeader({
           <div className="flex min-w-0 flex-col">
             <span className="text-sm font-semibold text-primary">AI Asset Pair</span>
 
-            <div className="mt-7 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)] lg:items-center">
+            <div className="mt-7 grid min-w-0 gap-5 xl:grid-cols-[240px_160px_275px] xl:items-center xl:justify-between xl:gap-x-5">
               <div className="min-w-0">
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-chart-3/10 px-3 py-1 text-sm font-medium text-chart-3">
                   <Database className="size-4" />
                   AI Dataset
                 </div>
-                <h1 className="mt-3 text-xl font-semibold tracking-tight text-pretty md:text-2xl">{dataset.name}</h1>
+                <h1 className="mt-3 w-[240px] max-w-full whitespace-normal break-words text-lg font-semibold tracking-tight text-pretty [overflow-wrap:anywhere] md:text-xl">{dataset.name}</h1>
               </div>
 
-              <div className="flex flex-col items-center justify-center gap-2 py-2">
-                <div className="flex w-full items-center gap-3">
-                  <span className="h-px flex-1 border-t border-dashed border-primary/40" />
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/5 text-primary">
-                    <Link2 className="size-5" />
-                  </span>
-                  <span className="relative h-px flex-1 border-t border-dashed border-primary/40">
-                    <span className="absolute -right-0.5 -top-[5px] size-2 rotate-45 border-r border-t border-primary/60" />
-                  </span>
-                </div>
-                <span className="whitespace-nowrap text-sm font-semibold text-primary">Used for Training</span>
+              <div className="flex w-full items-center py-2" aria-label="데이터셋이 모델 학습에 사용됨">
+                <span className="h-px min-w-3 flex-1 bg-primary/30" />
+                <span className="mx-2 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary whitespace-nowrap">
+                  <Link2 className="size-3.5" />
+                  학습에 사용됨
+                </span>
+                <span className="relative h-px min-w-3 flex-1 bg-primary/30">
+                  <span className="absolute -right-px -top-[3px] size-1.5 rotate-45 border-r border-t border-primary/50" />
+                </span>
               </div>
 
               <div className="min-w-0">
@@ -409,7 +411,7 @@ function PairDetailHeader({
                   <Cpu className="size-4" />
                   AI Model
                 </div>
-                <h2 className="mt-3 text-xl font-semibold tracking-tight text-pretty md:text-2xl">{model.name}</h2>
+                <h2 className="mt-3 w-[275px] max-w-full whitespace-normal break-words text-xl font-semibold tracking-tight text-pretty [overflow-wrap:anywhere] md:text-2xl">{model.name}</h2>
               </div>
             </div>
 
@@ -422,7 +424,7 @@ function PairDetailHeader({
               </div>
 
               {primaryAction && PrimaryIcon && (
-                primaryAction.href ? (
+                primaryAction.href && !primaryAction.disabled ? (
                   <Button
                     nativeButton={false}
                     render={
@@ -439,6 +441,8 @@ function PairDetailHeader({
                   </Button>
                 ) : (
                   <Button
+                    disabled={primaryAction.disabled}
+                    title={primaryAction.disabledReason}
                     className="h-12 rounded-2xl px-6 text-base"
                     onClick={() => toast.info(`${primaryAction.label} 요청을 시작했습니다`)}
                   >

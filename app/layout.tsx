@@ -5,6 +5,7 @@ import './globals.css'
 
 import { AppShell } from '@/components/app-shell'
 import { AuthProvider } from '@/components/auth/auth-provider'
+import { RefreshLoadingOverlay } from '@/components/refresh-loading-overlay'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -40,7 +41,27 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} bg-background`}
       suppressHydrationWarning
     >
+      <head>
+        <style>{`html[data-refreshing='true'] #refresh-loading-overlay { display: flex; }`}</style>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              const navigation = performance.getEntriesByType('navigation')[0];
+              const isReload = navigation?.type === 'reload' || performance.navigation?.type === 1;
+              if (!isReload) return;
+              const root = document.documentElement;
+              root.dataset.refreshing = 'true';
+              root.dataset.refreshStartedAt = String(performance.now());
+              window.setTimeout(() => {
+                delete root.dataset.refreshing;
+                delete root.dataset.refreshStartedAt;
+              }, 5000);
+            })();`,
+          }}
+        />
+      </head>
       <body className="font-sans antialiased">
+        <RefreshLoadingOverlay />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

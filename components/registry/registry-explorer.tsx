@@ -169,7 +169,7 @@ export function RegistryExplorer<T>({
             className="ml-auto text-muted-foreground"
           >
             <X data-icon="inline-start" />
-            Clear all
+            전체 초기화
           </Button>
         )}
       </div>
@@ -195,7 +195,7 @@ export function RegistryExplorer<T>({
                   }
                 >
                   <SlidersHorizontal data-icon="inline-start" />
-                  Filter
+                  필터
                   {selectedEntries.length > 0 && (
                     <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
                       {selectedEntries.length}
@@ -248,7 +248,7 @@ export function RegistryExplorer<T>({
               </EmptyHeader>
               {hasFilters && (
                 <Button variant="outline" onClick={clearAll}>
-                  Clear all
+                  전체 초기화
                 </Button>
               )}
             </Empty>
@@ -278,7 +278,7 @@ function FilterPanel({
     <div className="flex flex-col">
       <div className="flex items-center gap-1.5 pb-1 text-sm font-semibold">
         <SlidersHorizontal className="size-4 text-primary" />
-        Filter
+        필터
       </div>
       {groups.map((group) => (
         <FilterGroupSection

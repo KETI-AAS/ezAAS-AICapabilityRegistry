@@ -16,9 +16,11 @@ import {
   GitBranch,
   History,
   Mail,
+  LoaderCircle,
   Rocket,
   Server,
   ShieldCheck,
+  ShieldAlert,
   SplitSquareHorizontal,
   Target,
   TrendingUp,
@@ -34,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AasActions } from "@/components/registry/aas-actions"
 import { DetailHeader } from "@/components/registry/detail-header"
 import { TaskBadge } from "@/components/registry/task-badge"
+import { useModelValidation } from "@/hooks/use-model-validation"
 import { buildModelAasEnv } from "@/lib/aas/mock-aas"
 import { getDataset, getTaskThumbnail, type Model, type TreeNode } from "@/lib/registry-data"
 import { cn } from "@/lib/utils"
@@ -191,6 +194,9 @@ function Lineage({ root }: { root: TreeNode }) {
 }
 
 export function ModelDetail({ model }: { model: Model }) {
+  const modelValidation = useModelValidation(model.id)
+  const isModelValidating = modelValidation?.status === "validating"
+  const isModelInvalid = modelValidation?.status === "invalid"
   const dataset = getDataset(model.datasetId)
   const inputExample = dataset?.sampleImages?.[0] ?? dataset?.image ?? model.image
   const inputShape = model.inputs[0]?.shape ?? "—"
@@ -260,18 +266,20 @@ export function ModelDetail({ model }: { model: Model }) {
         badges={
           <>
             <TaskBadge task={model.task} />
-            <Badge className="gap-1 border-primary/20 bg-primary/10 text-primary">
-              <ShieldCheck className="size-3" />
-              AAS 검증 완료
+            <Badge className={cn("gap-1 border-primary/20 bg-primary/10 text-primary", isModelInvalid && "border-destructive/20 bg-destructive/10 text-destructive")}>
+              {isModelValidating ? <LoaderCircle className="size-3 animate-spin" /> : isModelInvalid ? <ShieldAlert className="size-3" /> : <ShieldCheck className="size-3" />}
+              {isModelValidating ? "추론 가능 여부 확인 중" : isModelInvalid ? "추론 준비 실패" : "추론 가능"}
             </Badge>
           </>
         }
         stats={headerStats}
         primaryAction={{
-          label: "Deploy",
+          label: "추론하기",
           icon: Rocket,
           href: `/models/${model.id}/deploy`,
           newTab: true,
+          disabled: isModelValidating || isModelInvalid,
+          disabledReason: isModelValidating ? "추론 가능 여부를 확인하고 있습니다." : isModelInvalid ? modelValidation?.message : undefined,
         }}
         actions={
           <AasActions

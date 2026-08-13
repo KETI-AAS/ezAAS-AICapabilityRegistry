@@ -46,13 +46,13 @@ export function DatasetExplorer() {
   return (
     <RegistryExplorer<Dataset>
       title="AI Dataset"
-      description="AI 모델 학습에 사용된 데이터셋입니다. Task, 데이터 유형, 도메인 등 여러 조건을 조합해 원하는 데이터셋을 탐색하세요."
-      searchPlaceholder="데이터셋 이름, 태그, 도메인으로 검색하세요"
+      description="AI 모델 학습에 사용된 데이터셋입니다. 적용 작업, 데이터 유형, 활용 분야 등 여러 조건을 조합해 원하는 데이터셋을 탐색하세요."
+      searchPlaceholder="데이터셋 이름, 태그, 활용 분야로 검색하세요"
       items={datasets}
       groups={datasetFilterGroups}
       sortOptions={sortOptions}
       defaultSort="latest"
-      countNoun="Dataset"
+      countNoun="데이터셋"
       getId={getId}
       getFacetValues={getFacetValues}
       getSearchText={getSearchText}

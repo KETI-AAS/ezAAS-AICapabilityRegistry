@@ -48,6 +48,13 @@ const surfaceInspection: AasEnvironment = {
         { idShort: "Version", modelType: "Property", valueType: "xs:string", value: "v2.1" },
         { idShort: "DataType", modelType: "Property", valueType: "xs:string", value: "이미지" },
         {
+          idShort: "Metadata",
+          modelType: "SubmodelElementCollection",
+          value: [
+            { idShort: "Filetype", modelType: "Property", valueType: "xs:string", value: "PNG" },
+          ],
+        },
+        {
           idShort: "Description",
           modelType: "MultiLanguageProperty",
           value: [{ language: "ko", text: "정상/불량 표면 이미지 12,000장, 결함 부위 바운딩 박스 라벨 포함" }],
@@ -107,6 +114,13 @@ const predictiveMaintenance: AasEnvironment = {
         { idShort: "Title", modelType: "Property", valueType: "xs:string", value: "모터 진동 센서 시계열" },
         { idShort: "Owner", modelType: "Property", valueType: "xs:string", value: "설비데이터팀" },
         { idShort: "DataType", modelType: "Property", valueType: "xs:string", value: "시계열" },
+        {
+          idShort: "Metadata",
+          modelType: "SubmodelElementCollection",
+          value: [
+            { idShort: "Filetype", modelType: "Property", valueType: "xs:string", value: "CSV" },
+          ],
+        },
         { idShort: "License", modelType: "Property", valueType: "xs:string", value: "Internal" },
       ],
     },
@@ -166,6 +180,13 @@ const datasetOnly: AasEnvironment = {
           modelType: "Property",
           valueType: "xs:string",
           value: "이미지",
+        },
+        {
+          idShort: "Metadata",
+          modelType: "SubmodelElementCollection",
+          value: [
+            { idShort: "Filetype", modelType: "Property", valueType: "xs:string", value: "JPG" },
+          ],
         },
       ],
     },
