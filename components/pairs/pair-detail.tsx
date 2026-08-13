@@ -17,8 +17,10 @@ import {
   HelpCircle,
   Layers,
   Link2,
+  LoaderCircle,
   Repeat,
   Rocket,
+  ShieldAlert,
   SlidersHorizontal,
   Sparkles,
   SplitSquareHorizontal,
@@ -35,6 +37,7 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { useModelValidation } from "@/hooks/use-model-validation"
 import { getTaskThumbnail, type AssetPair } from "@/lib/registry-data"
 import { cn } from "@/lib/utils"
 
@@ -134,6 +137,9 @@ function ioSummary(pair: AssetPair) {
 
 export function PairDetail({ pair }: { pair: AssetPair }) {
   const isValidated = pair.validation === "Validated"
+  const modelValidation = useModelValidation(pair.model.id)
+  const isModelValidating = modelValidation?.status === "validating"
+  const isModelInvalid = modelValidation?.status === "invalid"
   const training = trainingInfo(pair)
   const metrics = performanceMetrics(pair)
   const ctx = applicationContext(pair)
@@ -166,9 +172,9 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
         badges={
           <>
             <TaskBadge task={pair.task} />
-            <Badge variant={isValidated ? "default" : "secondary"} className="gap-1">
-              <CheckCircle2 className="size-3.5" />
-              {isValidated ? "AAS 검증 완료" : "검증 대기"}
+            <Badge variant={isModelInvalid ? "destructive" : isValidated ? "default" : "secondary"} className="gap-1">
+              {isModelValidating ? <LoaderCircle className="size-3.5 animate-spin" /> : isModelInvalid ? <ShieldAlert className="size-3.5" /> : <CheckCircle2 className="size-3.5" />}
+              {isModelValidating ? "추론 가능 여부 확인 중" : isModelInvalid ? "추론 준비 실패" : isValidated ? "추론 가능" : "검증 대기"}
             </Badge>
           </>
         }
@@ -187,10 +193,12 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
           },
         }}
         primaryAction={{
-          label: "Deploy",
+          label: "추론하기",
           icon: Rocket,
           href: `/models/${pair.model.id}/deploy`,
           newTab: true,
+          disabled: isModelValidating || isModelInvalid,
+          disabledReason: isModelValidating ? "추론 가능 여부를 확인하고 있습니다." : isModelInvalid ? modelValidation?.message : undefined,
         }}
       />
 
@@ -270,25 +278,25 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
 
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatTile
-            label="AI 유형"
+            label="Model Task"
             value={pair.task}
             accent
           />
 
           <StatTile
-            label="라벨 수"
-            value={pair.dataset.classCount}
-            suffix="종"
+            label="Framework"
+            value={pair.model.framework}
           />
 
           <StatTile
-            label="전체 샘플"
-            value={pair.dataset.totalSamples}
+            label="Model Version"
+            value={pair.model.version}
           />
 
           <StatTile
-            label="파일 형식"
-            value={pair.dataset.storage.fileType}
+            label={pair.metric.label}
+            value={pair.metric.value}
+            accent
           />
         </div>
 
@@ -466,7 +474,7 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
       </div>
 
       {/* 4. Dataset preview / Model preview */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         {/* Dataset Preview — light blue */}
         <Card className="border-chart-3/20 bg-chart-3/5">
           <CardHeader>
@@ -510,7 +518,7 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
         </Card>
 
         {/* Model Preview — indigo */}
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className="border-primary/30 bg-primary/5 shadow-sm ring-1 ring-primary/10">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Cpu className="size-4 text-primary" />
@@ -546,7 +554,7 @@ export function PairDetail({ pair }: { pair: AssetPair }) {
             </p>
             <Link
               href={`/models/${pair.model.id}`}
-              className={cn(buttonVariants({ variant: "outline" }), "w-full bg-card")}
+              className={cn(buttonVariants(), "w-full")}
             >
               <Cpu data-icon="inline-start" />
               Model 상세 페이지로 이동

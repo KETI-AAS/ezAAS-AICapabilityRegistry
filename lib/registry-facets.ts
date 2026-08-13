@@ -28,33 +28,44 @@ function uniq(values: string[]): string[] {
 /* Shared mappings                                                     */
 /* ------------------------------------------------------------------ */
 
-/** Korean dataType enum -> English marketplace "data / input type". */
-function dataTypeToEnglish(dataType: string): string[] {
+/** Registry data type -> Korean filter labels. */
+function dataTypeLabels(dataType: string): string[] {
   switch (dataType) {
     case "이미지":
-      return ["Image"]
+      return ["이미지"]
     case "시계열":
-      return ["Time-series", "Sensor"]
+      return ["시계열", "센서 데이터"]
     case "정형 데이터":
-      return ["Tabular"]
+      return ["표형 데이터"]
     case "텍스트":
-      return ["Text"]
+      return ["텍스트"]
     case "오디오":
-      return ["Sensor"]
+      return ["오디오"]
     case "비디오":
-      return ["Image"]
+      return ["영상"]
     case "멀티모달":
-      return ["Image", "Text"]
+      return ["이미지", "텍스트"]
     default:
-      return ["Image"]
+      return ["기타"]
   }
 }
 
-function accessLevel(license: string, seed: string): string {
+function taskLabel(task: string): string {
+  const labels: Record<string, string> = {
+    "Object Detection": "객체 탐지",
+    OCR: "OCR",
+    Segmentation: "영역 분할",
+    Classification: "분류",
+    "Anomaly Detection": "이상 탐지",
+    Forecasting: "예측",
+  }
+  return labels[task] ?? task
+}
+
+function accessLevel(license: string): string {
   const restricted = /NC|Internal|Proprietary|Restricted/i.test(license)
-  if (!restricted) return "Public"
-  // Split restricted licenses into Restricted / Private for coverage.
-  return hashStr(`${seed}-access`) % 3 === 0 ? "Private" : "Restricted"
+  if (!restricted) return "공개"
+  return "비공개"
 }
 
 /* ------------------------------------------------------------------ */
@@ -64,66 +75,66 @@ function accessLevel(license: string, seed: string): string {
 export const datasetFilterGroups = [
   {
     id: "task",
-    label: "Task Suitability",
+    label: "적용 작업",
     options: [
-      "Object Detection",
+      "객체 탐지",
       "OCR",
-      "Segmentation",
-      "Classification",
-      "Anomaly Detection",
-      "Forecasting",
+      "영역 분할",
+      "분류",
+      "이상 탐지",
+      "예측",
     ],
   },
   {
     id: "dataType",
-    label: "Data Type",
-    options: ["Image", "Sensor", "Tabular", "Time-series", "Text", "Log"],
+    label: "데이터 유형",
+    options: ["이미지", "센서 데이터", "표형 데이터", "시계열", "텍스트", "로그"],
   },
   {
     id: "domain",
-    label: "Domain",
+    label: "활용 분야",
     options: [
-      "Automotive Inspection",
-      "Document Processing",
-      "Equipment Monitoring",
-      "PCB Inspection",
-      "Manufacturing",
+      "자동차 검사",
+      "문서 처리",
+      "설비 모니터링",
+      "PCB 검사",
+      "제조",
     ],
   },
   {
     id: "fileFormat",
-    label: "File Format",
+    label: "파일 형식",
     options: ["JPG", "PNG", "CSV", "JSON", "Parquet", "TXT"],
   },
   {
     id: "access",
-    label: "Access Level",
-    options: ["Public", "Restricted", "Private"],
+    label: "공개 범위",
+    options: ["공개", "비공개"],
   },
 ] as const
 
 function datasetDomain(d: Dataset): string {
-  if (d.task === "OCR") return "Document Processing"
+  if (d.task === "OCR") return "문서 처리"
   switch (d.industry) {
     case "자동차":
-      return "Automotive Inspection"
+      return "자동차 검사"
     case "전자·반도체":
-      return "PCB Inspection"
+      return "PCB 검사"
     case "기계·장비":
     case "에너지":
-      return "Equipment Monitoring"
+      return "설비 모니터링"
     default:
-      return "Manufacturing"
+      return "제조"
   }
 }
 
 function datasetFileFormats(d: Dataset): string[] {
   const formats: string[] = []
-  const eng = dataTypeToEnglish(d.dataType)
-  if (eng.includes("Image")) formats.push("JPG", "PNG")
-  if (eng.includes("Tabular")) formats.push("CSV", "Parquet")
-  if (eng.includes("Time-series") || eng.includes("Sensor")) formats.push("CSV", "Parquet")
-  if (eng.includes("Text")) formats.push("TXT", "JSON")
+  const dataTypes = dataTypeLabels(d.dataType)
+  if (dataTypes.includes("이미지")) formats.push("JPG", "PNG")
+  if (dataTypes.includes("표형 데이터")) formats.push("CSV", "Parquet")
+  if (dataTypes.includes("시계열") || dataTypes.includes("센서 데이터")) formats.push("CSV", "Parquet")
+  if (dataTypes.includes("텍스트")) formats.push("TXT", "JSON")
 
   // Storage hints
   const ft = d.storage?.fileType?.toUpperCase()
@@ -138,14 +149,14 @@ function datasetFileFormats(d: Dataset): string[] {
 }
 
 function datasetDataTypeValues(d: Dataset): string[] {
-  const values = dataTypeToEnglish(d.dataType)
-  if (/log|로그|이력/.test(`${d.name} ${d.tags.join(" ")}`)) values.push("Log")
+  const values = dataTypeLabels(d.dataType)
+  if (/log|로그|이력/.test(`${d.name} ${d.tags.join(" ")}`)) values.push("로그")
   return uniq(values)
 }
 
 function datasetTaskValues(d: Dataset): string[] {
-  const values = [d.task as string]
-  if (d.dataType === "시계열") values.push("Forecasting")
+  const values = [taskLabel(d.task)]
+  if (d.dataType === "시계열") values.push("예측")
   return uniq(values)
 }
 
@@ -156,7 +167,7 @@ export function datasetFacetValues(d: Dataset): Record<string, string[]> {
     dataType: datasetDataTypeValues(d),
     domain: [datasetDomain(d)],
     fileFormat: datasetFileFormats(d),
-    access: [accessLevel(d.license, d.id)],
+    access: [accessLevel(d.license)],
   }
 }
 
@@ -171,30 +182,35 @@ export function datasetSampleCount(d: Dataset): number {
 export const modelFilterGroups = [
   {
     id: "task",
-    label: "Task",
+    label: "적용 작업",
     options: [
-      "Object Detection",
+      "객체 탐지",
       "OCR",
-      "Classification",
-      "Anomaly Detection",
-      "Segmentation",
-      "Forecasting",
+      "분류",
+      "이상 탐지",
+      "영역 분할",
+      "예측",
     ],
   },
   {
     id: "inputType",
-    label: "Input Type",
-    options: ["Image", "Sensor", "Tabular", "Time-series", "Text", "Log"],
+    label: "입력 데이터 유형",
+    options: ["이미지 데이터", "표형 데이터", "텍스트 데이터", "오디오 데이터", "영상 데이터", "기타 데이터"],
   },
   {
     id: "framework",
-    label: "Framework",
+    label: "프레임워크",
     options: ["PyTorch", "TensorFlow", "ONNX", "scikit-learn", "Transformers"],
   },
   {
     id: "access",
-    label: "Access Level",
-    options: ["Public", "Restricted", "Private"],
+    label: "공개 범위",
+    options: ["공개", "비공개"],
+  },
+  {
+    id: "inference",
+    label: "추론 가능 여부",
+    options: ["추론 가능", "추론 불가능"],
   },
 ] as const
 
@@ -230,20 +246,47 @@ function modelFrameworkValues(m: Model): string[] {
 
 function modelAccessLevel(m: Model): string {
   const ds = getDataset(m.datasetId)
-  return accessLevel(ds?.license ?? "Public", m.id)
+  return accessLevel(ds?.license ?? "Public")
+}
+
+function dataCategoryFromFileType(fileType: string): string {
+  const extension = fileType.trim().toLowerCase().split(/[./\\]/).filter(Boolean).pop() ?? ""
+  if (["png", "jpg", "jpeg", "bmp", "gif", "tif", "tiff", "webp"].includes(extension)) return "이미지 데이터"
+  if (["csv", "tsv", "xls", "xlsx", "parquet"].includes(extension)) return "표형 데이터"
+  if (["txt", "md", "pdf", "doc", "docx", "json", "jsonl", "xml", "yaml", "yml"].includes(extension)) return "텍스트 데이터"
+  if (["wav", "mp3", "flac", "aac", "ogg"].includes(extension)) return "오디오 데이터"
+  if (["mp4", "avi", "mov", "mkv", "webm"].includes(extension)) return "영상 데이터"
+  return "기타 데이터"
 }
 
 function modelInputTypeValues(m: Model): string[] {
-  return dataTypeToEnglish(m.dataType)
+  const dataset = getDataset(m.datasetId)
+  if (dataset?.storage.fileType) return [dataCategoryFromFileType(dataset.storage.fileType)]
+
+  const fallback: Record<string, string> = {
+    이미지: "이미지 데이터",
+    "정형 데이터": "표형 데이터",
+    텍스트: "텍스트 데이터",
+    오디오: "오디오 데이터",
+    비디오: "영상 데이터",
+  }
+  return [fallback[m.dataType] ?? "기타 데이터"]
 }
 
 /** Facet values for a model, keyed by filter group id. */
-export function modelFacetValues(m: Model): Record<string, string[]> {
+export function modelFacetValues(
+  m: Model,
+  validationStatus: "validating" | "valid" | "invalid" = "valid",
+): Record<string, string[]> {
   return {
-    task: [m.task as string],
+    task: [taskLabel(m.task)],
     inputType: modelInputTypeValues(m),
     framework: modelFrameworkValues(m),
     access: [modelAccessLevel(m)],
+    inference:
+      validationStatus === "validating"
+        ? []
+        : [validationStatus === "invalid" ? "추론 불가능" : "추론 가능"],
   }
 }
 

@@ -380,7 +380,7 @@ export function ModelDeployWorkbench({
             <Power />
             <AlertTitle>추론 환경이 종료되었습니다</AlertTitle>
             <AlertDescription>
-              모델 또는 Asset Pair 상세 화면에서 Deploy를 다시 눌러 새 세션을 시작할 수 있습니다.
+              모델 또는 Asset Pair 상세 화면에서 추론하기를 다시 눌러 새 세션을 시작할 수 있습니다.
             </AlertDescription>
           </Alert>
         ) : (

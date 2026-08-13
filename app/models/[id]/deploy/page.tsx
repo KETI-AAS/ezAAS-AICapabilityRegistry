@@ -16,10 +16,10 @@ export async function generateMetadata({
   const { id } = await params
   const model = getModel(id)
 
-  if (!model) return { title: "Deploy · Model Not Found" }
+  if (!model) return { title: "추론 · Model Not Found" }
 
   return {
-    title: `${model.name} Deploy`,
+    title: `${model.name} 추론`,
     description: `${model.name} 모델의 일회용 추론 환경`,
   }
 }

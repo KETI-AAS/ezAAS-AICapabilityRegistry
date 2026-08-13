@@ -39,6 +39,7 @@ export type DatasetMeta = {
   version?: string
   summary?: string
   dataType?: string
+  fileType?: string
   task?: string
   license?: string
   keywords?: string
@@ -153,6 +154,40 @@ function collectProps(
   }
 }
 
+/** Read an exact property from a named AAS collection (e.g. Metadata.Filetype). */
+function pickCollectionProperty(
+  elements: SubmodelElement[] | undefined,
+  collectionName: string,
+  propertyNames: string[],
+): string | undefined {
+  if (!Array.isArray(elements)) return undefined
+  for (const element of elements) {
+    const isCollection =
+      element.modelType === "SubmodelElementCollection" ||
+      element.modelType === "SubmodelElementList"
+    if (!isCollection || !Array.isArray(element.value)) continue
+
+    if (norm(element.idShort) === norm(collectionName)) {
+      for (const child of element.value as SubmodelElement[]) {
+        if (!propertyNames.some((name) => norm(child.idShort) === norm(name))) continue
+        const value =
+          typeof child.value === "string" || typeof child.value === "number"
+            ? String(child.value).trim()
+            : undefined
+        if (value) return value
+      }
+    }
+
+    const nested = pickCollectionProperty(
+      element.value as SubmodelElement[],
+      collectionName,
+      propertyNames,
+    )
+    if (nested) return nested
+  }
+  return undefined
+}
+
 /** Find the first property whose key exactly or loosely matches an alias. */
 function pick(props: Map<string, string>, aliases: string[]): string | undefined {
   for (const a of aliases) {
@@ -201,6 +236,7 @@ const ALIASES = {
   ],
   summary: ["summary", "description", "comment", "note", "abstract", "remark"],
   dataType: ["datatype", "datacategory", "modality", "dataformat", "datakind"],
+  fileType: ["filetype", "fileformat", "extension"],
   task: ["task", "tasktype", "usecase", "application", "purpose", "problemtype"],
   framework: ["framework", "mlframework", "runtime", "library", "backend", "toolkit"],
   license: ["license", "licence", "licensetype", "usageright", "accessright"],
@@ -216,6 +252,9 @@ export function extractDatasetMeta(sm: Submodel): DatasetMeta {
     version: pick(props, ALIASES.version),
     summary: pick(props, ALIASES.summary) ?? firstText(sm.description),
     dataType: pick(props, ALIASES.dataType),
+    fileType:
+      pickCollectionProperty(sm.submodelElements, "Metadata", ["Filetype", "FileType"]) ??
+      pick(props, ALIASES.fileType),
     task: pick(props, ALIASES.task),
     license: pick(props, ALIASES.license),
     keywords: pick(props, ALIASES.keywords),

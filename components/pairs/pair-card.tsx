@@ -11,7 +11,9 @@ import {
   Database,
   Download,
   Link2,
+  LoaderCircle,
   Lock,
+  Rocket,
   Star,
 } from "lucide-react"
 
@@ -19,6 +21,7 @@ import { TaskBadge } from "@/components/registry/task-badge"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { useModelValidation } from "@/hooks/use-model-validation"
 import {
   Tooltip,
   TooltipContent,
@@ -90,10 +93,12 @@ function AssetNode({
   return (
     <div
       className={cn(
-        "flex min-w-0 items-center gap-3 overflow-hidden rounded-xl border p-4",
+        "flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border p-4",
         featured && !isDataset
-          ? "flex-[1.35] border-primary/25 bg-gradient-to-br from-primary/12 via-primary/6 to-background shadow-sm ring-1 ring-primary/10"
-          : "flex-1 border-border bg-muted/30",
+          ? "border-primary/25 bg-gradient-to-br from-primary/12 via-primary/6 to-background shadow-sm ring-1 ring-primary/10"
+          : isDataset
+            ? "border-border/80 bg-muted/20"
+            : "border-border bg-muted/30",
       )}
     >
       {featured && !isDataset && image ? (
@@ -139,6 +144,9 @@ export function PairCard({
 }) {
   const isValidated = pair.validation === "Validated"
   const isFeatured = variant === "featured"
+  const modelValidation = useModelValidation(pair.model.id)
+  const isValidating = modelValidation?.status === "validating"
+  const isInvalid = modelValidation?.status === "invalid"
 
   return (
     <motion.div
@@ -148,8 +156,10 @@ export function PairCard({
     >
       <Card
         className={cn(
-          "flex flex-col gap-5 p-5 transition-all duration-300 hover:-translate-y-0.5 hover:ring-primary/30 hover:shadow-lg hover:shadow-foreground/5 md:p-6",
-          isFeatured && "border-primary/15 bg-gradient-to-r from-card via-card to-primary/[0.025]",
+          "flex flex-col gap-5 border-primary/15 bg-gradient-to-r from-card via-card to-primary/[0.035] p-5 transition-all duration-300 hover:-translate-y-0.5 hover:ring-primary/30 hover:shadow-lg hover:shadow-foreground/5 md:p-6",
+          isFeatured && "ring-1 ring-primary/10",
+          isValidating && "animate-pulse opacity-60 ring-2 ring-primary/30",
+          isInvalid && "ring-2 ring-destructive/30",
         )}
       >
         {/* Top row: title + minimal badges + status icons */}
@@ -160,8 +170,12 @@ export function PairCard({
             <Badge variant="outline">{accessLabel[pair.access]}</Badge>
           </div>
           <div className="flex items-center gap-1.5">
-            {isValidated ? (
-              <StatusIcon icon={CircleCheck} label="AAS 검증 완료" tone="success" />
+            {isValidating ? (
+              <Badge className="gap-1.5"><LoaderCircle className="size-3.5 animate-spin" />추론 가능 여부 확인 중</Badge>
+            ) : isInvalid ? (
+              <Badge variant="destructive" className="gap-1.5"><AlertTriangle className="size-3.5" />추론 준비 실패</Badge>
+            ) : isValidated ? (
+              <Badge className="gap-1.5 border-primary/20 bg-primary/10 text-primary"><CircleCheck className="size-3.5" />추론 가능</Badge>
             ) : (
               <StatusIcon icon={AlertTriangle} label="검증 경고" tone="warning" />
             )}
@@ -184,14 +198,15 @@ export function PairCard({
             />
 
             {/* Center link indicator */}
-            <div className="flex shrink-0 items-center justify-center gap-1.5 sm:flex-col sm:gap-1">
-              <span className="flex size-8 items-center justify-center rounded-full border border-primary/30 bg-primary/5 text-primary">
-                <Link2 className="size-4" />
-              </span>
-              <span className="text-[11px] font-medium text-primary sm:whitespace-nowrap">
+            <div className="flex w-full shrink-0 items-center sm:w-40" aria-label="데이터셋이 모델 학습에 사용됨">
+              <span className="h-px min-w-3 flex-1 bg-primary/30" />
+              <span className="mx-2 inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary whitespace-nowrap">
+                <Link2 className="size-3.5" />
                 학습에 사용됨
               </span>
-              <ArrowRight className="size-4 text-muted-foreground sm:rotate-90" />
+              <span className="relative h-px min-w-3 flex-1 bg-primary/30">
+                <span className="absolute -right-px -top-[3px] size-1.5 rotate-45 border-r border-t border-primary/50" />
+              </span>
             </div>
 
             <AssetNode
@@ -199,7 +214,7 @@ export function PairCard({
               name={pair.model.name}
               subtitle={`${pair.framework} · ${pair.version}`}
               image={getTaskThumbnail(pair.model.task)}
-              featured={isFeatured}
+              featured
             />
           </div>
 
@@ -237,9 +252,20 @@ export function PairCard({
               href={`/pairs/${pair.id}`}
               className={cn(buttonVariants({ size: "sm" }), "shrink-0 lg:w-full")}
             >
-              보기
+              모델 및 페어 보기
               <ArrowRight data-icon="inline-end" />
             </Link>
+            {!isValidating && !isInvalid && (
+              <Link
+                href={`/models/${pair.model.id}/deploy`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(buttonVariants({ size: "sm", variant: "outline" }), "shrink-0 border-primary/30 text-primary lg:w-full")}
+              >
+                <Rocket data-icon="inline-start" />
+                추론하기
+              </Link>
+            )}
           </div>
         </div>
       </Card>
