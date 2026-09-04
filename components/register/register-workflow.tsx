@@ -36,7 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { AasViewer } from "@/components/registry/aas-viewer"
 import type { AasEnvironment, TreeNode } from "@/lib/aas/aas-types"
 import {
   analyzeAas,
@@ -1070,13 +1069,6 @@ export function RegisterWorkflow() {
                   </div>
                 </div>
 
-                <div className="border-t border-border pt-6">
-                  <AasViewer
-                    fileName={upload.fileName}
-                    fileSize={upload.fileSize}
-                    tree={upload.tree}
-                  />
-                </div>
               </>
             )}
 
